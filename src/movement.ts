@@ -14,8 +14,19 @@ class Vector3D {
   }
 }
 
-
 class Move {
+  public steps: number = 1;
+  public speed: number;
+  public acceleration: number;
+  public instantSpeed: number;
+
+  constructor() {
+
+  }
+}
+
+
+class StepperMove {
   public direction: number; // 1 or -1
   public steps: number;
 
@@ -31,8 +42,8 @@ class Move {
               value: number) {
     this.value = value;
 
-    this.acceleration = 0; // 1e2
-    this.speed = 6400 / 2;
+    // this.acceleration = 0; // 1e2
+    // this.speed = 6400 / 2;
   }
 
   get value(): number {
@@ -94,7 +105,7 @@ class Move {
 }
 
 class Movement {
-  constructor(public moves: Move[] = []) { // public moves:{ [key:string]:Move }
+  constructor(public moves: StepperMove[] = []) { // public moves:{ [key:string]:StepperMove }
   }
 
   ended(): boolean {
@@ -108,7 +119,7 @@ class Movement {
 
   tick(time: number): number {
     let accelerationFactor: number = time * time * 0.5;
-    let move: Move;
+    let move: StepperMove;
     let stepsByte: number = 0 | 0;
     for(let i = 0, l = this.moves.length; i < l; i++) {
       move = this.moves[i];
@@ -124,23 +135,40 @@ class Movement {
 
   // test
 
-  normalizeMoves(moves: Move[]) {
-    let speedReferenceFactor = Math.min.apply(null, moves.map((move: Move) => {
-      return move.stepper.speedLimit / move.steps;
+  normalizeMoves() {
+    let factor = 1 / Math.max.apply(null, this.moves.map((move: StepperMove) => {
+      return move.steps;
     }));
 
-    let accelerationReferenceFactor = Math.min.apply(null, moves.map((move: Move) => {
-      return move.stepper.maxAcceleration / move.steps;
+    let speedReferenceFactor = Math.min.apply(null, this.moves.map((move: StepperMove) => {
+      return move.stepper.speedLimit / move.steps; // m/s / m => s^-1
     }));
 
-    for(let move of moves) {
-      move.speed = speedReferenceFactor * move.steps;
-      move.acceleration = accelerationReferenceFactor * move.steps;
-    }
+    let accelerationReferenceFactor = Math.min.apply(null, this.moves.map((move: StepperMove) => {
+      return move.stepper.accelerationLimit / move.steps; // m/s^-2 / m => s^-2
+    }));
+
+    let instantSpeedReferenceFactor = Math.max.apply(null, this.moves.map((move: StepperMove) => {
+      return move.stepper.instantSpeed / move.steps; // m/s / m => s^-1
+    }));
+
+    // for(let move of this.moves) {
+    //   move.targetSpeed        = speedReferenceFactor        * move.steps;
+    //   move.targetAcceleration = accelerationReferenceFactor * move.steps;
+    //   move.targetInstantSpeed = instantSpeedReferenceFactor * move.steps;
+    // }
+
+    let move = new Move();
+
+    move.speed        = speedReferenceFactor;
+    move.acceleration = accelerationReferenceFactor;
+    move.instantSpeed = instantSpeedReferenceFactor;
+
+    return move;
   }
 
   convertMovement() {
-    this.normalizeMoves(this.moves);
+    this.normalizeMoves();
     for(let move of this.moves) {
       // console.log(move);
       console.log(move.getMovement());
@@ -149,7 +177,7 @@ class Movement {
   }
 
   toString() {
-    return this.moves.map((move: Move) => move.toString()).join(', ');
+    return this.moves.map((move: StepperMove) => move.toString()).join(', ');
   }
 }
 
@@ -166,7 +194,7 @@ class Stepper {
 
 const stepsPerTurn = 6400;
 
-const ACCELERATION_LIMIT = stepsPerTurn / 2;
+const ACCELERATION_LIMIT = stepsPerTurn / 1;
 const SPEED_LIMIT = stepsPerTurn / 1;
 const INSTANT_SPEED = stepsPerTurn / 4;
 
@@ -226,7 +254,7 @@ class Main {
                 }
               }
 
-              movement.moves.push(new Move(
+              movement.moves.push(new StepperMove(
                 stepper,
                 delta
               ));
@@ -263,13 +291,17 @@ class Main {
   parseMovement(movements: Movement[]): Movement[] {
     let _movements: Movement[] = [];
 
+    let _moves: Move[] = [];
+
     let movement: Movement;
-    let transitionSpeed: number = 0;
     for(let i = 0, l = movements.length; i < l; i++) {
       movement = movements[i];
+      let move = movement.normalizeMoves();
+      // console.log((move.speed + ' - ' + move.acceleration + ' - ' + move.instantSpeed));
+      _moves.push(move);
     }
 
-    console.log(_movements);
+    console.log(_moves);
     return _movements;
   }
 
@@ -277,9 +309,9 @@ class Main {
 
 
 let speedTest = () => {
-  let moves: Move[] = [];
+  let moves: StepperMove[] = [];
   for(let i = 0; i < 1000000; i++) {
-    moves.push(new Move(CONFIG.steppers[0], Math.random() * 1e6));
+    moves.push(new StepperMove(CONFIG.steppers[0], Math.random() * 1e6));
     moves[i].t = Math.random();
   }
 
@@ -302,36 +334,36 @@ let speedTest = () => {
 let main = new Main(CONFIG);
 let movements: Movement[] = [
   new Movement([
-    new Move(CONFIG.steppers[0], stepsPerTurn),
-    new Move(CONFIG.steppers[1], 0)
+    new StepperMove(CONFIG.steppers[0], stepsPerTurn),
+    new StepperMove(CONFIG.steppers[1], 0)
   ]),
   new Movement([
-    new Move(CONFIG.steppers[0], stepsPerTurn),
-    new Move(CONFIG.steppers[1], stepsPerTurn)
+    new StepperMove(CONFIG.steppers[0], stepsPerTurn),
+    new StepperMove(CONFIG.steppers[1], stepsPerTurn)
   ]),
   new Movement([
-    new Move(CONFIG.steppers[0], 0),
-    new Move(CONFIG.steppers[1], stepsPerTurn)
+    new StepperMove(CONFIG.steppers[0], 0),
+    new StepperMove(CONFIG.steppers[1], stepsPerTurn)
   ]),
   new Movement([
-    new Move(CONFIG.steppers[0], -stepsPerTurn),
-    new Move(CONFIG.steppers[1], stepsPerTurn)
+    new StepperMove(CONFIG.steppers[0], -stepsPerTurn),
+    new StepperMove(CONFIG.steppers[1], stepsPerTurn)
   ]),
   new Movement([
-    new Move(CONFIG.steppers[0], -stepsPerTurn),
-    new Move(CONFIG.steppers[1], 0)
+    new StepperMove(CONFIG.steppers[0], -stepsPerTurn),
+    new StepperMove(CONFIG.steppers[1], 0)
   ]),
   new Movement([
-    new Move(CONFIG.steppers[0], -stepsPerTurn),
-    new Move(CONFIG.steppers[1], -stepsPerTurn)
+    new StepperMove(CONFIG.steppers[0], -stepsPerTurn),
+    new StepperMove(CONFIG.steppers[1], -stepsPerTurn)
   ]),
   new Movement([
-    new Move(CONFIG.steppers[0], 0),
-    new Move(CONFIG.steppers[1], -stepsPerTurn)
+    new StepperMove(CONFIG.steppers[0], 0),
+    new StepperMove(CONFIG.steppers[1], -stepsPerTurn)
   ]),
   new Movement([
-    new Move(CONFIG.steppers[0], stepsPerTurn),
-    new Move(CONFIG.steppers[1], -stepsPerTurn)
+    new StepperMove(CONFIG.steppers[0], stepsPerTurn),
+    new StepperMove(CONFIG.steppers[1], -stepsPerTurn)
   ])
 ];
 
