@@ -15,14 +15,41 @@ class Vector3D {
 }
 
 class Move {
-  public steps: number = 1;
-  public speed: number;
-  public acceleration: number;
-  public instantSpeed: number;
 
-  constructor() {
-
+  static computeDuration(distance: number, initialSpeed: number, acceleration: number): number {
+    return (acceleration === 0) ?
+      (distance / initialSpeed) : ((Move.computeFinalSpeed(distance, initialSpeed, acceleration) - initialSpeed) / acceleration);
   }
+
+  static computeFinalSpeed(distance: number, initialSpeed: number, acceleration: number): number {
+    return (acceleration === 0) ?
+      initialSpeed : Math.sqrt(initialSpeed * initialSpeed + 2 * acceleration * distance);
+  }
+
+}
+
+
+class TransitionMove {
+
+  public initialSpeed: number = 0;
+  public finalSpeed: number = 0;
+  public acceleration: number = 0;
+
+  public speedLimit: number;
+  public accelerationLimit: number;
+
+  constructor(public moves: StepperMove[]) {
+    this.speedLimit = Math.min.apply(null, this.moves.map((move: StepperMove) => {
+      return move.stepper.speedLimit / move.steps; // m/s / m => s^-1
+    }));
+
+    this.accelerationLimit = Math.min.apply(null, this.moves.map((move: StepperMove) => {
+      return move.stepper.accelerationLimit / move.steps; // m/s^-2 / m => s^-2
+    }));
+  }
+
+
+
 }
 
 
@@ -30,20 +57,15 @@ class StepperMove {
   public direction: number; // 1 or -1
   public steps: number;
 
-  public speed: number;
+  public initialSpeed: number;
   public acceleration: number;
 
   public stepped: number = 0;
 
-  public startSpeed: number = 0;
-  public endSpeed: number = 0;
 
   constructor(public stepper: Stepper,
               value: number) {
     this.value = value;
-
-    // this.acceleration = 0; // 1e2
-    // this.speed = 6400 / 2;
   }
 
   get value(): number {
@@ -68,16 +90,16 @@ class StepperMove {
    * Compute distance according to time
    */
   computeSteps(time: number): number {
-    return 0.5 * this.acceleration * time * time + this.speed * time;
+    return 0.5 * this.acceleration * time * time + this.initialSpeed * time;
   }
 
 
-  computeAccelerationTime(): number { // time to reach maximum speed
+  computeAccelerationTime(): number { // time to reach maximum initialSpeed
     if(this.acceleration === 0) {
       return 0;
     } else {
       return Math.min(
-        this.speed / this.acceleration,
+        this.initialSpeed / this.acceleration,
         Math.sqrt(this.steps / this.acceleration)
       );
     }
@@ -87,9 +109,9 @@ class StepperMove {
     let t = this.computeAccelerationTime();
     let d = (this.acceleration / 2) * t * t;
     let dv = this.steps - (d * 2);
-    let tv = (this.speed === 0) ? 0 : (dv / this.speed);
+    let tv = (this.initialSpeed === 0) ? 0 : (dv / this.initialSpeed);
 
-    // console.log(this.value / this.speed);
+    // console.log(this.value / this.initialSpeed);
     // console.log(t, d, dv, tv);
     return [
       [d * this.direction, t],
@@ -123,7 +145,7 @@ class Movement {
     let stepsByte: number = 0 | 0;
     for(let i = 0, l = this.moves.length; i < l; i++) {
       move = this.moves[i];
-      let steps = Math.min(move.steps, Math.round(move.acceleration * accelerationFactor + move.speed * time));
+      let steps = Math.min(move.steps, Math.round(move.acceleration * accelerationFactor + move.initialSpeed * time));
       let deltaSteps = (steps - move.stepped) ? 1 : 0;
       stepsByte |= deltaSteps << i;
       move.stepped += deltaSteps;
@@ -135,40 +157,14 @@ class Movement {
 
   // test
 
-  normalizeMoves() {
-    let factor = 1 / Math.max.apply(null, this.moves.map((move: StepperMove) => {
-      return move.steps;
-    }));
-
-    let speedReferenceFactor = Math.min.apply(null, this.moves.map((move: StepperMove) => {
-      return move.stepper.speedLimit / move.steps; // m/s / m => s^-1
-    }));
-
-    let accelerationReferenceFactor = Math.min.apply(null, this.moves.map((move: StepperMove) => {
-      return move.stepper.accelerationLimit / move.steps; // m/s^-2 / m => s^-2
-    }));
-
-    let instantSpeedReferenceFactor = Math.max.apply(null, this.moves.map((move: StepperMove) => {
-      return move.stepper.instantSpeed / move.steps; // m/s / m => s^-1
-    }));
-
-    // for(let move of this.moves) {
-    //   move.targetSpeed        = speedReferenceFactor        * move.steps;
-    //   move.targetAcceleration = accelerationReferenceFactor * move.steps;
-    //   move.targetInstantSpeed = instantSpeedReferenceFactor * move.steps;
-    // }
-
-    let move = new Move();
-
-    move.speed        = speedReferenceFactor;
-    move.acceleration = accelerationReferenceFactor;
-    move.instantSpeed = instantSpeedReferenceFactor;
-
-    return move;
+  getTransitionMove() {
+    return new TransitionMove(this.moves);
   }
 
+
+
   convertMovement() {
-    this.normalizeMoves();
+    this.getTransitionMove();
     for(let move of this.moves) {
       // console.log(move);
       console.log(move.getMovement());
@@ -291,40 +287,88 @@ class Main {
   parseMovement(movements: Movement[]): Movement[] {
     let _movements: Movement[] = [];
 
-    let _moves: Move[] = [];
 
+    let transitionMoves: TransitionMove[] = [];
     let movement: Movement;
     for(let i = 0, l = movements.length; i < l; i++) {
       movement = movements[i];
-      let move = movement.normalizeMoves();
-      // console.log((move.speed + ' - ' + move.acceleration + ' - ' + move.instantSpeed));
-      _moves.push(move);
+      let move = movement.getTransitionMove();
+      // console.log((move.initialSpeed + ' - ' + move.acceleration + ' - ' + move.instantSpeed));
+      transitionMoves.push(move);
     }
 
-    console.log(_moves);
+    // console.log(transitionMoves);
+
+    let currentMove: TransitionMove = transitionMoves[0];
+    let nextMove: TransitionMove;
+    let transitionSpeed:number = currentMove.initialSpeed;
+    for(let i = 0, l = transitionMoves.length; i < l - 1; i++) {
+      currentMove = transitionMoves[i];
+      nextMove = transitionMoves[i + 1] || null;
+
+      console.log('---');
+
+      // console.log(Move.computeDuration(move.steps, 0, move.acceleration));
+      currentMove.initialSpeed = transitionSpeed;
+      currentMove.finalSpeed = Math.min(currentMove.speedLimit, Move.computeFinalSpeed(1, currentMove.initialSpeed, currentMove.accelerationLimit));
+
+
+
+      let jerk:number = 0;
+      let maxDeltaSpeed = 0;
+      for(let j = 0, l = currentMove.moves.length; j < l; j++) {
+        let finalSpeed = currentMove.moves[j].steps * currentMove.finalSpeed;
+        let initialSpeed = nextMove.moves[j].steps * currentMove.finalSpeed;
+        // let finalSpeed = move.steps * currentMove.finalSpeed;
+        let deltaSpeed = Math.abs(initialSpeed - finalSpeed);
+        maxDeltaSpeed = Math.max(maxDeltaSpeed, deltaSpeed);
+        console.log(finalSpeed, initialSpeed, deltaSpeed, deltaSpeed);
+      }
+
+      console.log(maxDeltaSpeed);
+      //console.log(currentMove.finalSpeed);
+      transitionSpeed = currentMove.finalSpeed;
+
+    }
+
+
+
     return _movements;
   }
 
 }
 
 
-let speedTest = () => {
-  let moves: StepperMove[] = [];
-  for(let i = 0; i < 1000000; i++) {
-    moves.push(new StepperMove(CONFIG.steppers[0], Math.random() * 1e6));
-    moves[i].t = Math.random();
-  }
+// let speedTest1 = () => {
+//   let moves: StepperMove[] = [];
+//   for(let i = 0; i < 1000000; i++) {
+//     moves.push(new StepperMove(CONFIG.steppers[0], Math.random() * 1e6));
+//     moves[i].t = Math.random();
+//   }
+//
+//   var timerObject = new NanoTimer();
+//   let a = 0;
+//   var microsecs = timerObject.time(() => {
+//     for(let move of moves) {
+//       a += 0.5 * move.stepper.accelerationLimit * move.t * move.t + move.stepper.speedLimit * move.t; // 73.76ns
+//     }
+//   }, '', 'n');
+//   console.log(microsecs / moves.length, a);
+// };
+
+let speedTest2 = () => {
 
   var timerObject = new NanoTimer();
   let a = 0;
   var microsecs = timerObject.time(() => {
-    for(let move of moves) {
-      a += 0.5 * move.stepper.accelerationLimit * move.t * move.t + move.stepper.speedLimit * move.t; // 73.76ns
+    for(let i = 0; i < 1000000; i++) {
+      let acc = (Math.random() > 0.5) ? 0 : Math.random();
+      a += Move.computeFinalSpeed(Math.random(), Math.random(), acc);
     }
   }, '', 'n');
-  console.log(microsecs / moves.length, a);
+  console.log(microsecs / 1000000, a);
 };
-// speedTest();
+// speedTest2();
 
 /**
  * /--\
