@@ -11,10 +11,12 @@
   "devDependencies": {
     "@types/core-js": "latest",
     "@types/node": "latest",
+    "@types/rpio": "latest",
     "typescript": "^2.0.6"
   },
   "dependencies": {
     "nanotimer": "^0.3.14",
+    "rpio": "^0.9.12",
     "serialport": "^4.0.3",
     "virtual-serialport": "^0.2.1"
   }
