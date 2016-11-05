@@ -1,9 +1,13 @@
 import * as rpio from 'rpio';
+
 import { MCP3201 } from './components/MCP3201';
 
-var NanoTimer = require('nanotimer');
+let NanoTimer:any = require('nanotimer');
+
 
 rpio.init({gpiomem: false});
+
+
 MCP3201.initSPI();
 // rpio.spiChipSelect(0);
 // rpio.spiSetCSPolarity(0, rpio.LOW);
@@ -25,6 +29,9 @@ setInterval(() => {
   // console.log('status', status.toString());
   // rpio.write(3, status);
 }, 100);
+
+
+
 
 
 
