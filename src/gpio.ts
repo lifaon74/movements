@@ -19,16 +19,19 @@ let status: number = rpio.HIGH;
 rpio.open(3, rpio.OUTPUT, status);
 
 let timerObject = new NanoTimer();
-setInterval(() => {
+
+let loop = () => {
   let value: number;
-  var time = timerObject.time(() => {
+  let time = timerObject.time(() => {
     value = mcp3201.read();
-  }, '', 'n');
+  }, '', 'u');
   console.log(time, value);
-  // status = (status === rpio.HIGH) ? rpio.LOW : rpio.HIGH;
-  // console.log('status', status.toString());
-  // rpio.write(3, status);
-}, 100);
+  // (<any>rpio).msleep(100);
+  process.nextTick(loop);
+};
+
+
+loop();
 
 
 

@@ -1,4 +1,8 @@
 import { GCODEParser } from './gcodeParser';
+import { Stepper, StepperMove } from './classes/stepper';
+import { Movement } from './classes/movement';
+import { TransitionMove } from './classes/transitionMove';
+
 var NanoTimer = require('nanotimer');
 
 
@@ -29,165 +33,6 @@ class Move {
 }
 
 
-class TransitionMove {
-
-  public initialSpeed: number = 0;
-  public finalSpeed: number = 0;
-  public acceleration: number = 0;
-
-  public speedLimit: number;
-  public accelerationLimit: number;
-
-  constructor(public moves: StepperMove[]) {
-    this.speedLimit = Math.min.apply(null, this.moves.map((move: StepperMove) => {
-      return move.stepper.speedLimit / move.steps; // m/s / m => s^-1
-    }));
-
-    this.accelerationLimit = Math.min.apply(null, this.moves.map((move: StepperMove) => {
-      return move.stepper.accelerationLimit / move.steps; // m/s^-2 / m => s^-2
-    }));
-  }
-
-
-
-}
-
-
-class StepperMove {
-  public direction: number; // 1 or -1
-  public steps: number;
-
-  public initialSpeed: number;
-  public acceleration: number;
-
-  public stepped: number = 0;
-
-
-  constructor(public stepper: Stepper,
-              value: number) {
-    this.value = value;
-  }
-
-  get value(): number {
-    return this.steps * this.direction;
-  }
-
-  set value(value: number) {
-    this.steps = Math.abs(value);
-    this.direction = Math.sign(value) || 1;
-  }
-
-
-  // test
-
-  computeLimitSpeeds() {
-    // this.startSpeed = this.stepper.instantSpeed;
-    // this.endSpeed = this.startSpeed * t + 0.5 * this.acceleration * t * t;
-  }
-
-
-  /**
-   * Compute distance according to time
-   */
-  computeSteps(time: number): number {
-    return 0.5 * this.acceleration * time * time + this.initialSpeed * time;
-  }
-
-
-  computeAccelerationTime(): number { // time to reach maximum initialSpeed
-    if(this.acceleration === 0) {
-      return 0;
-    } else {
-      return Math.min(
-        this.initialSpeed / this.acceleration,
-        Math.sqrt(this.steps / this.acceleration)
-      );
-    }
-  }
-
-  getMovement() {
-    let t = this.computeAccelerationTime();
-    let d = (this.acceleration / 2) * t * t;
-    let dv = this.steps - (d * 2);
-    let tv = (this.initialSpeed === 0) ? 0 : (dv / this.initialSpeed);
-
-    // console.log(this.value / this.initialSpeed);
-    // console.log(t, d, dv, tv);
-    return [
-      [d * this.direction, t],
-      [dv * this.direction, tv],
-      [d * this.direction, t]
-    ];
-  }
-
-
-  toString(): string {
-    return this.stepper.name + ': ' + this.value;
-  }
-}
-
-class Movement {
-  constructor(public moves: StepperMove[] = []) { // public moves:{ [key:string]:StepperMove }
-  }
-
-  ended(): boolean {
-    for(let i = 0, l = this.moves.length; i < l; i++) {
-      if(this.moves[i].stepped < this.moves[i].steps) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  tick(time: number): number {
-    let accelerationFactor: number = time * time * 0.5;
-    let move: StepperMove;
-    let stepsByte: number = 0 | 0;
-    for(let i = 0, l = this.moves.length; i < l; i++) {
-      move = this.moves[i];
-      let steps = Math.min(move.steps, Math.round(move.acceleration * accelerationFactor + move.initialSpeed * time));
-      let deltaSteps = (steps - move.stepped) ? 1 : 0;
-      stepsByte |= deltaSteps << i;
-      move.stepped += deltaSteps;
-    }
-
-    // console.log(stepsByte.toString(2));
-    return stepsByte;
-  }
-
-  // test
-
-  getTransitionMove() {
-    return new TransitionMove(this.moves);
-  }
-
-
-
-  convertMovement() {
-    this.getTransitionMove();
-    for(let move of this.moves) {
-      // console.log(move);
-      console.log(move.getMovement());
-    }
-    // console.log(movement.moves);
-  }
-
-  toString() {
-    return this.moves.map((move: StepperMove) => move.toString()).join(', ');
-  }
-}
-
-
-class Stepper {
-  constructor(public name: string,
-              public accelerationLimit: number,
-              public speedLimit: number,
-              public instantSpeed: number,
-              public stepsPerMm: number) {
-  }
-}
-
-
 const stepsPerTurn = 6400;
 
 const ACCELERATION_LIMIT = stepsPerTurn / 1;
@@ -207,6 +52,8 @@ const CONFIG: ICONFIG = <ICONFIG>{
     new Stepper('e', 1e10, SPEED_LIMIT, INSTANT_SPEED, 160),
   ]
 };
+
+
 
 
 class Main {
@@ -336,6 +183,33 @@ class Main {
     return _movements;
   }
 
+  executeMovements(movements: Movement[], callback: (() => any)) {
+    let movementIndex: number = 0;
+    let currentMovement: Movement = movements[movementIndex];
+    let startTime = process.hrtime();
+
+    let loop = () => {
+      let time = process.hrtime(startTime);
+      let t = time[0] + time[1] / 1e9;
+      let byte = currentMovement.tick(t);
+      if(byte) {
+        // console.log(byte.toString(2));
+      }
+
+      if(currentMovement.ended()) {
+        currentMovement = movements[movementIndex++];
+        if(currentMovement) {
+          startTime = process.hrtime();
+        } else {
+          return callback();
+        }
+      }
+
+      process.nextTick(loop);
+    };
+
+    loop();
+  }
 }
 
 
@@ -357,16 +231,15 @@ class Main {
 // };
 
 let speedTest2 = () => {
-
-  var timerObject = new NanoTimer();
+  let timerObject = new NanoTimer();
   let a = 0;
-  var microsecs = timerObject.time(() => {
+  let time = timerObject.time(() => {
     for(let i = 0; i < 1000000; i++) {
       let acc = (Math.random() > 0.5) ? 0 : Math.random();
       a += Move.computeFinalSpeed(Math.random(), Math.random(), acc);
     }
   }, '', 'n');
-  console.log(microsecs / 1000000, a);
+  console.log(time / 1000000, a);
 };
 // speedTest2();
 
@@ -411,25 +284,24 @@ let movements: Movement[] = [
   ])
 ];
 
-main.parseMovement(movements);
+//main.parseMovement(movements);
 
-// let movement = movements[0];
-// movement.moves[1].acceleration /= 2;
-//
-// let startTime = process.hrtime();
-//
-// while(!movement.ended()) {
-//   let time = process.hrtime(startTime);
-//   let t = time[0] + time[1] / 1e9;
-//   let byte = movement.tick(t);
-//   if(byte) {
-//     // console.log(byte.toString(2));
-//   }
-// }
-//
-// let t = process.hrtime(startTime);
-// console.log(t);
 
+
+
+
+movements.forEach((movement: Movement) => {
+  movement.moves.forEach((move: StepperMove) => {
+    move.acceleration = 0;
+    move.initialSpeed = move.stepper.speedLimit;
+  });
+});
+
+let t1 = process.hrtime();
+main.executeMovements(movements, () => {
+  let t = process.hrtime(t1);
+  console.log(t);
+});
 
 // console.log(CONFIG.steppers[0].movement(1e4));
 // console.log(main.convertMovement(movement));

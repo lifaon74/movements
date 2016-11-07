@@ -25,7 +25,8 @@ export class MCP3201 {
 
   static initSPI() {
     rpio.spiBegin();
-    rpio.spiSetClockDivider(MCP3201.getMaxSPIClockDivider());
+    // rpio.spiSetClockDivider(MCP3201.getMaxSPIClockDivider());
+    rpio.spiSetClockDivider(128);
   }
 
 
