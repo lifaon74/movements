@@ -123,13 +123,13 @@ export class Matrix {
 
   /**
    * Apply a pivot to a matrix
-   * @param matrix_0 the matrix to pivot
+   * @param matrix the matrix to pivot
    * @param m_pivot the row of the pivot
    * @param n_pivot the column of the pivot
    * @returns {Matrix}
    */
-  static pivot(matrix_0: Matrix, m_pivot: number, n_pivot: number): Matrix {
-    return Matrix.fromMatrix(matrix_0).pivot(m_pivot, n_pivot);
+  static pivot(matrix: Matrix, m_pivot: number, n_pivot: number): Matrix {
+    return Matrix.fromMatrix(matrix).pivot(m_pivot, n_pivot);
   }
 
 
@@ -150,11 +150,33 @@ export class Matrix {
    *
    * The last column contain the result
    *
-   * @param matrix_0
+   * @param matrix
    * @returns {Matrix}
    */
-  static solve(matrix_0: Matrix): Matrix {
-    return Matrix.fromMatrix(matrix_0).solve();
+  static solve(matrix: Matrix): Matrix {
+    return Matrix.fromMatrix(matrix).solve();
+  }
+
+
+  static getSolutions(matrix_0: Matrix): Matrix {
+    let matrix = new Matrix(matrix_0.m, 1);
+    let lastColumnNumber: number = matrix_0.n - 1;
+    let lastColumnIndex: number = lastColumnNumber * matrix_0.m;
+
+    for(let m = 0; m < matrix_0.m; m++) {
+      let n: number;
+      for(n = 0; n < lastColumnNumber; n++) {
+        if(matrix_0.values[m + n * matrix_0.m] === 1) {
+          matrix.values[n] = matrix_0.values[m + lastColumnIndex];
+          break;
+        }
+      }
+
+      if(n === lastColumnNumber) {
+        return null;
+      }
+    }
+    return matrix;
   }
 
 
@@ -219,6 +241,10 @@ export class Matrix {
           this.values[m + n * this.m] =
             absolutePivot * this.values[m + n * this.m] +
             a * this.values[m_pivot + n * this.m];
+
+          if(isNaN(this.values[m + n * this.m])) {
+            console.log('nan');
+          }
         }
       }
     }
