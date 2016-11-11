@@ -31,23 +31,77 @@ export class Matrix {
    * @returns {Matrix}
    */
   static fromMatrix(matrix: Matrix): Matrix {
-    return new Matrix(matrix.m, matrix.n, new Float32Array(matrix.values));
+    return new Matrix(matrix.m, matrix.n, new Float64Array(matrix.values));
   }
 
+
+  /**
+   * Convert a set a standard maximization problem matrix into a simplex tableau
+   *
+   * Example:  => http://www.zweigmedia.com/MundoReal/tutorialsf4/frames4_3.html
+   *
+   *   Maximize p = 2x - 3y + 4z subject to the constraints
+   *     4x - 3y + z <= 3
+   *     x + y + z <= 10
+   *     2x + y - z <= 10,
+   *     x >= 0, y >= 0, z >= 0
+   *
+   *   Gives the matrix:
+   *     4,	-3, 1, 3
+   *     1, 1, 1, 10
+   *     2, 1, -1, 10
+   *     -2, 3, -4, 0
+   *
+   * @param matrix_0
+   * @returns {number[][]}
+   */
+  static toSimplexTableau(matrix_0: Matrix): Matrix {
+    // if(matrix_0.m !== matrix_0.n) {
+    //   throw new Error('matrix.n must be equal to matrix.m');
+    // }
+
+    // variables
+    let matrix = new Matrix(matrix_0.m, matrix_0.n + matrix_0.m);
+    for(let m = 0; m < matrix_0.m; m++) {
+      for(let n = 0; n < matrix_0.n - 1; n++) {
+        matrix.values[m + n * matrix.m] = matrix_0.values[m + n * matrix.m];
+      }
+    }
+
+    // answers (last row)
+    let lastColumnIndexMatrix_0: number = (matrix_0.n - 1) * matrix_0.m;
+    let lastColumnIndexMatrix: number = (matrix.n - 1) * matrix.m;
+    for(let m = 0; m < matrix_0.m; m++) {
+      matrix.values[m + lastColumnIndexMatrix] = matrix_0.values[m + lastColumnIndexMatrix_0];
+    }
+
+    // slack variables (identity matrix)
+    for(let m = 0; m < matrix_0.m; m++) {
+      matrix.values[m + (m + matrix_0.n - 1) * matrix.m] = 1;
+    }
+
+    return matrix;
+  }
 
   /**
    * Compare two matrix and return true if all elements are equals
    * @param matrix_0
    * @param matrix_1
+   * @param areEqualsCallback [optional]
    * @returns {boolean}
    */
-  static areEquals(matrix_0: Matrix, matrix_1: Matrix): boolean {
+  static areEquals(
+    matrix_0: Matrix,
+    matrix_1: Matrix,
+    areEqualsCallback: ((a: number, b: number) => boolean) = ((a, b) => (a === b))
+  ): boolean {
+
     if((matrix_0.m !== matrix_1.m) || (matrix_0.n !== matrix_1.n)) {
       return false;
     }
 
     for(let i = 0; i < matrix_0.values.length; i++) {
-      if(matrix_0.values[i] !== matrix_1.values[i]) {
+      if(!areEqualsCallback(matrix_0.values[i], matrix_1.values[i])) {
         return false;
       }
     }
@@ -56,14 +110,14 @@ export class Matrix {
   }
 
   /**
-   * Create an identity matrix with a size of n
-   * @param n the size of the identity matrix
+   * Create an identity matrix with a size of 'size'
+   * @param size the size of the identity matrix
    * @returns {Matrix}
    */
-  static identity(n: number): Matrix {
-    let matrix = new Matrix(n, n);
-    for(let i = 0; i < n; i++) {
-      matrix.values[i + i * n] = 1; // matrix.set(i, i, 1)
+  static identity(size: number): Matrix {
+    let matrix = new Matrix(size, size);
+    for(let i = 0; i < size; i++) {
+      matrix.values[i + i * size] = 1; // matrix.set(i, i, 1)
     }
     return matrix;
   }
@@ -158,6 +212,20 @@ export class Matrix {
   }
 
 
+  /**
+   * Return formatted solutions of a solved matrix or null if no solution
+   *
+   * In matrix:
+   *  0, 1,  0.4,
+   *  1, 0, -0.2
+   *
+   * Out matrix:
+   *  -0.2,
+   *   0.4
+   *
+   * @param matrix_0
+   * @returns {Matrix} | null
+   */
   static getSolutions(matrix_0: Matrix): Matrix {
     let matrix = new Matrix(matrix_0.m, 1);
     let lastColumnNumber: number = matrix_0.n - 1;
@@ -190,9 +258,9 @@ export class Matrix {
    *  (0, 1), (1, 1), ...
    * ]
    */
-  constructor(public m: number, public n: number, public values?: Float32Array) {
+  constructor(public m: number, public n: number, public values?: Float64Array) {
     if(!this.values) {
-      this.values = new Float32Array(this.m * this.n)
+      this.values = new Float64Array(this.m * this.n)
     }
   }
 
@@ -205,13 +273,17 @@ export class Matrix {
   }
 
   toString(): string {
-    let string = '';
+    let string = '[\n';
     for(let m = 0; m < this.m; m++) {
-      if(m > 0) string += '\n';
+      if(m > 0) string += ',\n';
+      string += '  [';
       for(let n = 0; n < this.n; n++) {
-        string += this.get(m, n).toString() + ', ';
+        if(n > 0) string += ', ';
+        string += this.get(m, n).toString();
       }
+      string += ']';
     }
+    string += '\n]\n';
     return string;
   }
 
@@ -238,16 +310,19 @@ export class Matrix {
       if(m !== m_pivot) {
         let a: number = pivotInvertedSign * this.values[m + pivotColumnIndex];
         for(let n = 0; n < this.n; n++) {
-          this.values[m + n * this.m] =
-            absolutePivot * this.values[m + n * this.m] +
-            a * this.values[m_pivot + n * this.m];
-
-          if(isNaN(this.values[m + n * this.m])) {
-            console.log('nan');
-          }
+          let columnIndex: number = n * this.m;
+          this.values[m + columnIndex] =
+            absolutePivot * this.values[m + columnIndex] +
+            a * this.values[m_pivot + columnIndex];
         }
       }
     }
+
+    return this;
+  }
+
+
+  simplex(): this {
 
     return this;
   }
@@ -262,6 +337,7 @@ export class Matrix {
       for(let n = 0; n < this.m; n++) {
         if(this.values[m + n * this.m] !== 0) {
           this.pivot(m, n);
+          this._reduceRowsCoefficients();
           break;
         }
       }
@@ -279,7 +355,64 @@ export class Matrix {
         }
       }
     }
+
+    // console.log('solved:\n', this.toString(), '\n');
     return this;
+  }
+
+  /**
+   * This function try to divide an entire row by the best factor
+   * to keep values in the range of floats, this avoids NaN,
+   * Infinite and -Infinite values
+   * @private
+   */
+  private _reduceRowsCoefficients() {
+    // console.log('bef', this.toString(), '\n');
+
+
+    // try to reach 0 technique
+    // let max: number, value: number;
+    // for(let m_1 = 0; m_1 < this.m; m_1++) {
+    //   max = 1;
+    //
+    //   for(let n_1 = 0; n_1 < this.n; n_1++) {
+    //     value = Math.abs(this.values[m_1 + n_1 * this.m]);
+    //     if(value < 1e-9) {
+    //       this.values[m_1 + n_1 * this.m] = 0;
+    //     } else {
+    //       max = Math.max(max, value);
+    //     }
+    //   }
+    //   for(let n_1 = 0; n_1 < this.n; n_1++) {
+    //     this.values[m_1 + n_1 * this.m] /= max;
+    //   }
+    // }
+
+    // try to reach 1 technique
+    let sum: number, count:number, value: number;
+    for(let m_1 = 0; m_1 < this.m; m_1++) {
+      sum = 0;
+      count = 0;
+
+      for(let n_1 = 0; n_1 < this.n; n_1++) {
+        value = Math.abs(this.values[m_1 + n_1 * this.m]);
+        if(value < 1e-12) {
+          this.values[m_1 + n_1 * this.m] = 0;
+        } else {
+          sum += Math.log(value);
+          count++;
+        }
+      }
+
+      if(count > 0) {
+        value = Math.exp(sum / count);
+        for(let n_1 = 0; n_1 < this.n; n_1++) {
+          this.values[m_1 + n_1 * this.m] /= value;
+        }
+      }
+    }
+
+    // console.log(this.toString(), '\n');
   }
 
 }

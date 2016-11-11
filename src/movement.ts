@@ -18,6 +18,41 @@ class Vector3D {
   }
 }
 
+
+export class Kinematic {
+  // public position: number = 0;
+  // public acceleration: number = 0;
+  // public jerk: number = 0;
+
+  public initialJerk: number = 0;
+  public initialVelocity: number = 0;
+  public initialAcceleration: number = 0;
+
+  constructor() {
+
+  }
+
+  getAcceleration(time: number): number {
+    return this.initialJerk * time + this.initialAcceleration;
+  }
+
+  getVelocity(time: number): number {
+    return 0.5 * this.initialJerk * time * time + this.initialAcceleration * time;
+  }
+
+  getPosition(time: number): number {
+    return (1 / 6) * this.initialJerk * time * time * time + 0.5 * this.initialAcceleration * time * time + this.initialVelocity * time;
+  }
+
+
+  getDuration(position: number): number {
+    return 0;
+  }
+}
+
+
+
+
 class Move {
 
   static computeDuration(distance: number, initialSpeed: number, acceleration: number): number {
@@ -37,7 +72,7 @@ const stepsPerTurn = 6400;
 
 const ACCELERATION_LIMIT = stepsPerTurn / 1;
 const SPEED_LIMIT = stepsPerTurn / 1;
-const INSTANT_SPEED = stepsPerTurn / 4;
+const JERK_LIMIT = stepsPerTurn / 4;
 
 
 interface ICONFIG {
@@ -46,10 +81,10 @@ interface ICONFIG {
 
 const CONFIG: ICONFIG = <ICONFIG>{
   steppers: [
-    new Stepper('x', ACCELERATION_LIMIT, SPEED_LIMIT, INSTANT_SPEED, 160),
-    new Stepper('y', ACCELERATION_LIMIT, SPEED_LIMIT, INSTANT_SPEED, 160),
-    new Stepper('z', ACCELERATION_LIMIT, SPEED_LIMIT, INSTANT_SPEED, 3316.36),
-    new Stepper('e', 1e10, SPEED_LIMIT, INSTANT_SPEED, 160),
+    new Stepper('x', ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160),
+    new Stepper('y', ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160),
+    new Stepper('z', ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 3316.36),
+    new Stepper('e', 1e10, SPEED_LIMIT, JERK_LIMIT, 160),
   ]
 };
 
@@ -157,19 +192,25 @@ class Main {
 
       // console.log(Move.computeDuration(move.steps, 0, move.acceleration));
       currentMove.initialSpeed = transitionSpeed;
+      // let's compute maximal final speed with maxAcceleration
       currentMove.finalSpeed = Math.min(currentMove.speedLimit, Move.computeFinalSpeed(1, currentMove.initialSpeed, currentMove.accelerationLimit));
 
 
-
-      let jerk:number = 0;
       let maxDeltaSpeed = 0;
+      let currentStepperMove: StepperMove, nextStepperMove: StepperMove;
       for(let j = 0, l = currentMove.moves.length; j < l; j++) {
-        let finalSpeed = currentMove.moves[j].steps * currentMove.finalSpeed;
-        let initialSpeed = nextMove.moves[j].steps * currentMove.finalSpeed;
-        // let finalSpeed = move.steps * currentMove.finalSpeed;
+        currentStepperMove = currentMove.moves[j];
+        nextStepperMove = nextMove.moves[j];
+        let finalSpeed = currentStepperMove.steps * currentMove.finalSpeed;
+        let initialSpeed = nextStepperMove.steps * currentMove.finalSpeed;
         let deltaSpeed = Math.abs(initialSpeed - finalSpeed);
+
+        if(deltaSpeed > nextStepperMove.stepper.jerkLimit) {
+          console.log('too fast');
+        }
+
         maxDeltaSpeed = Math.max(maxDeltaSpeed, deltaSpeed);
-        console.log(finalSpeed, initialSpeed, deltaSpeed, deltaSpeed);
+        console.log(finalSpeed, initialSpeed, deltaSpeed);
       }
 
       console.log(maxDeltaSpeed);

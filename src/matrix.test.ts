@@ -1,5 +1,34 @@
 import { Matrix } from './classes/matrix.class';
 
+
+let rand = () => {
+  return Math.floor(Math.random() * 10 - 5);
+  //return Math.random();
+};
+
+// Number.EPSILON
+let areEquals = (number_0: number, number_1: number, precision: number = 1e-3): boolean => {
+  return Math.abs(number_0 - number_1) < precision;
+};
+
+let buildRandomMatrix = (number: number, size: number): Matrix[] => {
+  let matrixArray:Matrix[] = [];
+
+  for(let i = 0; i < number; i++) {
+    let data = new Float64Array(size * (size + 1));
+    for(let i = 0; i < data.length; i++) {
+      data[i] = rand();
+    }
+
+    matrixArray.push(new Matrix(size, size + 1, data));
+  }
+
+  return matrixArray;
+};
+
+
+
+
 let a = Matrix.fromArray([
   [1, 0],
   [-1, 3]
@@ -68,8 +97,8 @@ if(!Matrix.areEquals(Matrix.pivot(Matrix.fromArray([
 if(!Matrix.areEquals(Matrix.solve(d), Matrix.solve(Matrix.fromArray([
     [-8, 1, 2],
     [ 3, 4, 1]
-  ])))) {
-  throw new Error('solve does\'nt pass');
+  ])), areEquals)) {
+  throw new Error('solve 1 does\'nt pass');
 }
 
 
@@ -83,45 +112,17 @@ if(!Matrix.areEquals(Matrix.solve(e), Matrix.fromArray([
     [1, 0, 0, 1],
     [0, 1, 0, 2],
     [0, 0, 1, -1]
-  ]))) {
-  throw new Error('solve does\'nt pass');
+  ]), areEquals)) {
+  throw new Error('solve 2 does\'nt pass');
 }
 
 
-let rand = () => {
-  return Math.floor(Math.random() * 10 - 5);
-  // return Math.random();
-};
-
-// Number.EPSILON
-let areEquals = (number_0: number, number_1: number, precision: number = 1e-3): boolean => {
-  return Math.abs(number_0 - number_1) < precision;
-};
-
-let buildRandomMatrix = (number: number, size: number): Matrix[] => {
-  let matrixArray:Matrix[] = [];
-
-  for(let i = 0; i < number; i++) {
-    let data = new Float32Array(size * (size + 1));
-    for(let i = 0; i < data.length; i++) {
-      data[i] = rand();
-    }
-
-    matrixArray.push(new Matrix(size, size + 1, data));
-  }
-
-  return matrixArray;
-};
-
-let matrixArray:Matrix[] = buildRandomMatrix(100000, 6);
-
-for(let matrix of matrixArray) {
+let checkIfProperlySolved = (matrix: Matrix): number => {
   let solved = Matrix.solve(matrix);
   let solutions = Matrix.getSolutions(solved);
 
   if(solutions === null) {
-    //console.log('no solutions', matrix.toString());
-    continue;
+    return -1;
   }
 
   let lastColumnIndex = matrix.n - 1;
@@ -133,8 +134,11 @@ for(let matrix of matrixArray) {
       sum += matrix.get(m, n) * solutions.get(n, 0);
     }
 
-    if(!areEquals(sum, matrix.get(m, lastColumnIndex), 1e-1)) {
-      console.log(sum, matrix.get(m, lastColumnIndex));
+    if(!areEquals(sum, matrix.get(m, lastColumnIndex), 1e-3)) {
+      console.log('row', m);
+      console.log('value', sum);
+      console.log('expected', matrix.get(m, lastColumnIndex));
+
       console.log(
         matrix.toString(), '\n--\n',
         solved.toString(), '\n\n',
@@ -145,19 +149,42 @@ for(let matrix of matrixArray) {
   }
 
   if(matrix.m !== m) {
-    setImmediate(() => { throw new Error('solved failed'); });
-    break;
+    setImmediate(() => { throw new Error('solved 3 failed'); });
+    return 0;
   }
-}
+
+  return 1;
+};
+
+let solveTest = () => {
+  let matrixArray:Matrix[] = buildRandomMatrix(1000, 16);
+  let inconsistent: number = 0;
+  for(let matrix of matrixArray) {
+    switch(checkIfProperlySolved(matrix)) {
+      case -1:
+        inconsistent++;
+        break;
+      case 0:
+        return;
+    }
+  }
+
+  console.log('inconsistent', inconsistent); // ak not resolvable
+};
+
+solveTest();
 
 
 let solveSpeedTest = () => {
+  let matrixArray:Matrix[] = buildRandomMatrix(100000, 10);
+
   let a:number = 0;
   let t1 = process.hrtime();
   for(let matrix of matrixArray) {
     //let solved = Matrix.solve(matrix);
     let solutions = Matrix.getSolutions(matrix.solve());
     if(solutions) {
+      // console.log(solutions.toString());
       a += solutions.values[0];
     }
   }
@@ -165,15 +192,15 @@ let solveSpeedTest = () => {
   console.log(t2[0] + t2[1] / 1e9, a);
 };
 
-solveSpeedTest();
+// solveSpeedTest();
 
 
-// console.log(Matrix.solve(Matrix.fromArray([
-//   [-2, 1/4, 1/2],
-//   [1/2, 2/3, 1/6]
-// ])).toString());
+let f = Matrix.fromArray([
+  [4,	-3, 1, 3],
+  [1, 1, 1, 10],
+  [2, 1, -1, 10],
+  [-2, 3, -4, 0]
+]);
 
-// console.log(Matrix.pivot(e, 0, 0).toString(), '\n');  // [[1, -5, 5, -6], [0, 6, -16, 28], [0, 4, -3, 11]]
-
-
+console.log(Matrix.toSimplexTableau(f).toString());
 

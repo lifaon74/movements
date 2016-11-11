@@ -2,11 +2,10 @@ export class Stepper {
   constructor(public name: string,
               public accelerationLimit: number,
               public speedLimit: number,
-              public instantSpeed: number,
+              public jerkLimit: number,
               public stepsPerMm: number) {
   }
 }
-
 
 export class StepperMove {
   public direction: number; // 1 or -1
@@ -31,6 +30,9 @@ export class StepperMove {
     this.steps = Math.abs(value);
     this.direction = Math.sign(value) || 1;
   }
+
+
+
 
 
 
