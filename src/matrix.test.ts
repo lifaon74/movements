@@ -119,7 +119,7 @@ if(!Matrix.areEquals(Matrix.solve(e), Matrix.fromArray([
 
 let checkIfProperlySolved = (matrix: Matrix): number => {
   let solved = Matrix.solve(matrix);
-  let solutions = Matrix.getSolutions(solved);
+  let solutions = Matrix.getSolveSolutions(solved);
 
   if(solutions === null) {
     return -1;
@@ -182,7 +182,7 @@ let solveSpeedTest = () => {
   let t1 = process.hrtime();
   for(let matrix of matrixArray) {
     //let solved = Matrix.solve(matrix);
-    let solutions = Matrix.getSolutions(matrix.solve());
+    let solutions = Matrix.getSolveSolutions(matrix.solve());
     if(solutions) {
       // console.log(solutions.toString());
       a += solutions.values[0];
@@ -195,12 +195,41 @@ let solveSpeedTest = () => {
 // solveSpeedTest();
 
 
+// let f = Matrix.fromArray([
+//   [4,	-3, 1, 3],
+//   [1, 1, 1, 10],
+//   [2, 1, -1, 10],
+//   [-2, 3, -4, 0]
+// ]);
+
 let f = Matrix.fromArray([
-  [4,	-3, 1, 3],
-  [1, 1, 1, 10],
-  [2, 1, -1, 10],
-  [-2, 3, -4, 0]
+  [2, 1, 1, 14],
+  [4, 2, 3, 28],
+  [2, 5, 5, 30],
+  [-1, -2, 1, 0]
 ]);
 
-console.log(Matrix.toSimplexTableau(f).toString());
+let g = Matrix.fromArray([
+  // [1, -1, 0, 1],
+  // [-1, 1, 0, 1],
+  // [1,  0, 0, 1],
+  // [-1, -1, 0, 0]
+
+  // [1, -1, 1],
+  // [-1, 1, 1],
+  // [1,  0, 1],
+  // [-1, -1, 0]
+
+  [3, -1, 1],
+  [-3, 1, 1],
+  [1, -2, 1],
+  [-1, 2, 1],
+  [1,  0, 1],
+  [-1, -1, 0]
+]);
+
+// let tableau = Matrix.toSimplexTableau(f);
+// console.log(tableau.toString());
+// console.log(tableau.simplex().toString());
+console.log(Matrix.toSimplexTableau(g).simplex().toString());
 

@@ -61,7 +61,7 @@ export class Matrix {
     // }
 
     // variables
-    let matrix = new Matrix(matrix_0.m, matrix_0.n + matrix_0.m);
+    let matrix = new Matrix(matrix_0.m, matrix_0.n + matrix_0.m - 1);
     for(let m = 0; m < matrix_0.m; m++) {
       for(let n = 0; n < matrix_0.n - 1; n++) {
         matrix.values[m + n * matrix.m] = matrix_0.values[m + n * matrix.m];
@@ -76,7 +76,7 @@ export class Matrix {
     }
 
     // slack variables (identity matrix)
-    for(let m = 0; m < matrix_0.m; m++) {
+    for(let m = 0; m < matrix_0.m - 1; m++) {
       matrix.values[m + (m + matrix_0.n - 1) * matrix.m] = 1;
     }
 
@@ -226,7 +226,7 @@ export class Matrix {
    * @param matrix_0
    * @returns {Matrix} | null
    */
-  static getSolutions(matrix_0: Matrix): Matrix {
+  static getSolveSolutions(matrix_0: Matrix): Matrix {
     let matrix = new Matrix(matrix_0.m, 1);
     let lastColumnNumber: number = matrix_0.n - 1;
     let lastColumnIndex: number = lastColumnNumber * matrix_0.m;
@@ -322,9 +322,72 @@ export class Matrix {
   }
 
 
+  // http://math.uww.edu/~mcfarlat/s-prob.htm
+  // https://en.wikipedia.org/wiki/Simplex_algorithm
+  // http://www.zweigmedia.com/MundoReal/tutorialsf4/frames4_3.html
   simplex(): this {
+    let lastRowIndex: number = this.m - 1;
+    let lastColumnNumber: number = this.n - 1;
+    let lastColumnIndex: number = lastColumnNumber * this.m;
+    let columnIndex: number; // index of the pivot column
 
-    return this;
+    let value_0: number, value_1: number, min: number, ratio: number;
+    let column: number, row: number;
+
+    let i: number = 0;
+    while(i < 1000) {
+      column = row = -1;
+
+      // search for most negative value, if all values >= 0 finish
+      min = 0;
+      for(let n = 0; n < lastColumnNumber; n++) {
+        value_0 = this.values[lastRowIndex + n * this.m];
+        if(value_0 < min) {
+          column = n;
+          min = value_0;
+        }
+      }
+
+      if(column === -1) {
+        console.log('finished');
+        return this;
+      }
+
+      columnIndex = column * this.m;
+      min = 1;
+      for(let m = 0; m < lastRowIndex; m++) {
+        value_0 = this.values[m + columnIndex];
+        // value_1 = this.values[m + lastColumnIndex];
+        // if((value_0 !== 0) && (Math.sign(value_0) === Math.sign(value_1))) {
+        if(value_0 > 0) {
+          ratio = this.values[m + lastColumnIndex] / value_0;
+          if((row === -1) || (ratio < min)) {
+            row = m;
+            min = ratio;
+          }
+        }
+      }
+
+      console.log(row, column, min);
+
+      if(row === -1) {
+        console.log('inconsistent');
+        return null;
+      }
+
+      let pivot: number = this.values[row + column * this.m];
+      for(let n = 0; n < this.n; n++) {
+        this.values[row + n * this.m] /= pivot;
+      }
+
+      this.pivot(row, column);
+
+      console.log(this.toString());
+
+      i++;
+    }
+
+    return null;
   }
 
   // http://www.zweigmedia.com/MundoReal/tutorialsf1/frames2_2B.html
