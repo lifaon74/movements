@@ -16,11 +16,10 @@
   },
   "dependencies": {
     "nanotimer": "^0.3.14",
-    "//": {
-      "webworker-threads": "latest",
-      "rpio": "^0.9.12",
-      "serialport": "^4.0.3",
-      "virtual-serialport": "^0.2.1"
-    }
+    "rpio": "^0.9.12",
+    "serialport": "^4.0.3",
+    "spi": "^0.2.0",
+    "virtual-serialport": "^0.2.1",
+    "webworker-threads": "latest"
   }
 }
