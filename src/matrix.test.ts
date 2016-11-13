@@ -94,7 +94,7 @@ if(!Matrix.areEquals(Matrix.pivot(Matrix.fromArray([
 
 
 // TEST SOLVE
-if(!Matrix.areEquals(Matrix.solve(d), Matrix.solve(Matrix.fromArray([
+if(!Matrix.areEquals(Matrix.solveSystemOfEquationsProblem(d), Matrix.solveSystemOfEquationsProblem(Matrix.fromArray([
     [-8, 1, 2],
     [ 3, 4, 1]
   ])), areEquals)) {
@@ -108,7 +108,7 @@ let e = Matrix.fromArray([
   [ 1,  3,  2,  5]
 ]);
 
-if(!Matrix.areEquals(Matrix.solve(e), Matrix.fromArray([
+if(!Matrix.areEquals(Matrix.solveSystemOfEquationsProblem(e), Matrix.fromArray([
     [1, 0, 0, 1],
     [0, 1, 0, 2],
     [0, 0, 1, -1]
@@ -118,42 +118,27 @@ if(!Matrix.areEquals(Matrix.solve(e), Matrix.fromArray([
 
 
 let checkIfProperlySolved = (matrix: Matrix): number => {
-  let solved = Matrix.solve(matrix);
-  let solutions = Matrix.getSolveSolutions(solved);
+  let solved = Matrix.solveSystemOfEquationsProblem(matrix);
+  let solutions = Matrix.getSystemOfEquationsProblemSolutions(solved);
 
   if(solutions === null) {
     return -1;
   }
 
-  let lastColumnIndex = matrix.n - 1;
+  let correct = Matrix.verifySystemOfEquationsProblemSolutions(matrix, solutions);
 
-  let m: number;
-  for(m = 0; m < matrix.m; m++) {
-    let sum: number = 0;
-    for(let n = 0; n < lastColumnIndex; n++) {
-      sum += matrix.get(m, n) * solutions.get(n, 0);
-    }
+  if(correct) {
+    return 1;
+  } else {
+    console.log(
+      matrix.toString(), '\n--\n',
+      solved.toString(), '\n\n',
+      solutions.toString(), '\n\n'
+    );
 
-    if(!areEquals(sum, matrix.get(m, lastColumnIndex), 1e-3)) {
-      console.log('row', m);
-      console.log('value', sum);
-      console.log('expected', matrix.get(m, lastColumnIndex));
-
-      console.log(
-        matrix.toString(), '\n--\n',
-        solved.toString(), '\n\n',
-        solutions.toString(), '\n\n'
-      );
-      break;
-    }
-  }
-
-  if(matrix.m !== m) {
     setImmediate(() => { throw new Error('solved 3 failed'); });
     return 0;
   }
-
-  return 1;
 };
 
 let solveTest = () => {
@@ -175,14 +160,14 @@ let solveTest = () => {
 solveTest();
 
 
-let solveSpeedTest = () => {
+let solveSystemOfEquationsProblemSpeedTest = () => {
   let matrixArray:Matrix[] = buildRandomMatrix(100000, 10);
 
   let a:number = 0;
   let t1 = process.hrtime();
   for(let matrix of matrixArray) {
-    //let solved = Matrix.solve(matrix);
-    let solutions = Matrix.getSolveSolutions(matrix.solve());
+    //let solved = Matrix.solveSystemOfEquationsProblem(matrix);
+    let solutions = Matrix.getSystemOfEquationsProblemSolutions(matrix.solveSystemOfEquationsProblem());
     if(solutions) {
       // console.log(solutions.toString());
       a += solutions.values[0];
@@ -192,8 +177,41 @@ let solveSpeedTest = () => {
   console.log(t2[0] + t2[1] / 1e9, a);
 };
 
-// solveSpeedTest();
+// solveSystemOfEquationsProblemSpeedTest();
 
+let standardMaximizationProblemSpeedTest = () => {
+  let mat = Matrix.fromArray([
+    [3, -1, 1],
+    [-3, 1, 1],
+    [1, -2, 1],
+    [-1, 2, 1],
+    [1,  0, 0.5],
+    [0,  1, 0.5],
+    [-1, -1, 0]
+  ]);
+
+  let matrixArray:Matrix[] = [];
+  for(let i = 0; i < 1000000; i++) {
+    let _mat = Matrix.fromMatrix(mat);
+    _mat.set(5, 2, Math.random() + 0.5);
+    matrixArray.push(_mat);
+  }
+
+  let a:number = 0;
+  let t1 = process.hrtime();
+  for(let matrix of matrixArray) {
+    //let solved = Matrix.solveSystemOfEquationsProblem(matrix);
+    let solutions = Matrix.getStandardMaximizationProblemSolutions(matrix.solveStandardMaximizationProblem());
+    if(solutions) {
+      // console.log(solutions.toString());
+      a += solutions.values[0];
+    }
+  }
+  let t2 = process.hrtime(t1);
+  console.log(t2[0] + t2[1] / 1e9, a);
+};
+
+// standardMaximizationProblemSpeedTest();
 
 // let f = Matrix.fromArray([
 //   [4,	-3, 1, 3],
@@ -203,13 +221,11 @@ let solveSpeedTest = () => {
 // ]);
 
 let f = Matrix.fromArray([
-  [2, 1, 1, 14],
-  [4, 2, 3, 28],
-  [2, 5, 5, 30],
-  [-1, -2, 1, 0]
-]);
+  // [2, 1, 1, 14],
+  // [4, 2, 3, 28],
+  // [2, 5, 5, 30],
+  // [-1, -2, 1, 0]
 
-let g = Matrix.fromArray([
   // [1, -1, 0, 1],
   // [-1, 1, 0, 1],
   // [1,  0, 0, 1],
@@ -224,12 +240,17 @@ let g = Matrix.fromArray([
   [-3, 1, 1],
   [1, -2, 1],
   [-1, 2, 1],
-  [1,  0, 1],
+  [1,  0, 0.5],
+  [0,  1, 0.5],
   [-1, -1, 0]
 ]);
 
+
 // let tableau = Matrix.toSimplexTableau(f);
 // console.log(tableau.toString());
-// console.log(tableau.simplex().toString());
-console.log(Matrix.toSimplexTableau(g).simplex().toString());
-
+// console.log(tableau.solveStandardMaximizationProblem().toString());
+let solved = Matrix.toSimplexTableau(f).solveStandardMaximizationProblem();
+if(solved) {
+  console.log(solved.toString());
+  console.log(Matrix.getStandardMaximizationProblemSolutions(solved).toString());
+}

@@ -188,9 +188,9 @@ export class Matrix {
 
 
   /**
-   * Solve a matrix
+   * Solve a system of equations
    *
-   * Assuming a set of equations:
+   * Example:
    *  1/2 * x + 2/3 * y = 1/6
    *  -2 * x + 1/4 * y = 1/2
    *
@@ -207,13 +207,14 @@ export class Matrix {
    * @param matrix
    * @returns {Matrix}
    */
-  static solve(matrix: Matrix): Matrix {
-    return Matrix.fromMatrix(matrix).solve();
+  static solveSystemOfEquationsProblem(matrix: Matrix): Matrix {
+    return Matrix.fromMatrix(matrix).solveSystemOfEquationsProblem();
   }
 
 
   /**
-   * Return formatted solutions of a solved matrix or null if no solution
+   * Return the formatted solutions from solved matrix of a system of equations
+   * or null if no solution
    *
    * In matrix:
    *  0, 1,  0.4,
@@ -226,13 +227,13 @@ export class Matrix {
    * @param matrix_0
    * @returns {Matrix} | null
    */
-  static getSolveSolutions(matrix_0: Matrix): Matrix {
+  static getSystemOfEquationsProblemSolutions(matrix_0: Matrix): Matrix {
     let matrix = new Matrix(matrix_0.m, 1);
     let lastColumnNumber: number = matrix_0.n - 1;
     let lastColumnIndex: number = lastColumnNumber * matrix_0.m;
+    let n: number;
 
     for(let m = 0; m < matrix_0.m; m++) {
-      let n: number;
       for(n = 0; n < lastColumnNumber; n++) {
         if(matrix_0.values[m + n * matrix_0.m] === 1) {
           matrix.values[n] = matrix_0.values[m + lastColumnIndex];
@@ -247,7 +248,88 @@ export class Matrix {
     return matrix;
   }
 
+  /**
+   * Verify if the solutions are conform to the system of equations matrix
+   *
+   * @param matrix
+   * @param solutions
+   * @param precision
+   * @returns {boolean}
+   */
+  static verifySystemOfEquationsProblemSolutions(matrix: Matrix, solutions: Matrix, precision: number = 1e-3): boolean {
+    if(solutions === null) {
+      return true;
+    }
 
+    let lastColumnNumber = matrix.n - 1;
+    let lastColumnIndex = lastColumnNumber * matrix.m;
+
+    let m: number;
+    for(m = 0; m < matrix.m; m++) {
+      let sum: number = 0;
+      for(let n = 0; n < lastColumnIndex; n++) {
+        sum +=  matrix.values[m + n * matrix.m] * solutions.values[n];
+      }
+
+      if(Math.abs(sum - matrix.values[m + lastColumnNumber]) > precision) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+
+  /**
+   * Return the formatted solutions from solved matrix of a standard maximization problem
+   *
+   * Out matrix: [
+   *    x,
+   *    y,
+   *    ...,
+   *    slack0,
+   *    slack1,
+   *    ...
+   *    maximum
+   *  ]
+   *
+   * @param matrix_0
+   * @returns {Matrix}
+   */
+  static getStandardMaximizationProblemSolutions(matrix_0: Matrix): Matrix {
+    let matrix = new Matrix(matrix_0.n, 1);
+    let lastColumnNumber: number = matrix_0.n - 1;
+    let lastRowIndex: number = matrix_0.m - 1;
+    let lastColumnIndex: number = lastColumnNumber * matrix_0.m;
+
+    let value: number;
+    let rowIndex: number;
+
+    for(let n = 0; n < lastColumnNumber; n++) {
+      rowIndex = -1;
+      for(let m = 0; m < lastRowIndex; m++) {
+        value = matrix_0.values[m + n * matrix_0.m];
+        if(value === 1) {
+          if(rowIndex === -1) {
+            rowIndex = m;
+          } else {
+            rowIndex = -1;
+            break;
+          }
+        } else if(value !== 0) {
+          break;
+        }
+      }
+
+      if(rowIndex !== -1) {
+        matrix.values[n] = matrix_0.values[rowIndex + lastColumnIndex];
+      }
+    }
+
+    matrix.values[lastColumnNumber] = matrix_0.values[matrix_0.values.length - 1];
+
+    return matrix;
+  }
 
   /**
    *
@@ -321,77 +403,8 @@ export class Matrix {
     return this;
   }
 
-
-  // http://math.uww.edu/~mcfarlat/s-prob.htm
-  // https://en.wikipedia.org/wiki/Simplex_algorithm
-  // http://www.zweigmedia.com/MundoReal/tutorialsf4/frames4_3.html
-  simplex(): this {
-    let lastRowIndex: number = this.m - 1;
-    let lastColumnNumber: number = this.n - 1;
-    let lastColumnIndex: number = lastColumnNumber * this.m;
-    let columnIndex: number; // index of the pivot column
-
-    let value_0: number, value_1: number, min: number, ratio: number;
-    let column: number, row: number;
-
-    let i: number = 0;
-    while(i < 1000) {
-      column = row = -1;
-
-      // search for most negative value, if all values >= 0 finish
-      min = 0;
-      for(let n = 0; n < lastColumnNumber; n++) {
-        value_0 = this.values[lastRowIndex + n * this.m];
-        if(value_0 < min) {
-          column = n;
-          min = value_0;
-        }
-      }
-
-      if(column === -1) {
-        console.log('finished');
-        return this;
-      }
-
-      columnIndex = column * this.m;
-      min = 1;
-      for(let m = 0; m < lastRowIndex; m++) {
-        value_0 = this.values[m + columnIndex];
-        // value_1 = this.values[m + lastColumnIndex];
-        // if((value_0 !== 0) && (Math.sign(value_0) === Math.sign(value_1))) {
-        if(value_0 > 0) {
-          ratio = this.values[m + lastColumnIndex] / value_0;
-          if((row === -1) || (ratio < min)) {
-            row = m;
-            min = ratio;
-          }
-        }
-      }
-
-      console.log(row, column, min);
-
-      if(row === -1) {
-        console.log('inconsistent');
-        return null;
-      }
-
-      let pivot: number = this.values[row + column * this.m];
-      for(let n = 0; n < this.n; n++) {
-        this.values[row + n * this.m] /= pivot;
-      }
-
-      this.pivot(row, column);
-
-      console.log(this.toString());
-
-      i++;
-    }
-
-    return null;
-  }
-
   // http://www.zweigmedia.com/MundoReal/tutorialsf1/frames2_2B.html
-  solve(): this {
+  solveSystemOfEquationsProblem(): this {
     if((this.m + 1) !== this.n) {
       throw new Error('matrix.n must be equal to matrix.m + 1');
     }
@@ -422,6 +435,77 @@ export class Matrix {
     // console.log('solved:\n', this.toString(), '\n');
     return this;
   }
+
+
+  // http://math.uww.edu/~mcfarlat/s-prob.htm
+  // https://en.wikipedia.org/wiki/Simplex_algorithm
+  // http://www.zweigmedia.com/MundoReal/tutorialsf4/frames4_3.html
+  solveStandardMaximizationProblem(): this { // simplex method
+    let lastRowIndex: number = this.m - 1;
+    let lastColumnNumber: number = this.n - 1;
+    let lastColumnIndex: number = lastColumnNumber * this.m;
+    let columnIndex: number; // index of the pivot column
+
+    let value_0: number/*, value_1: number*/, min: number, ratio: number;
+    let column: number, row: number;
+
+    let i: number = 0;
+    let limit: number = this.m * 100;
+    while(i < limit) {
+      column = row = -1;
+
+      // search for most negative value, if all values >= 0 finish
+      min = 0;
+      for(let n = 0; n < lastColumnNumber; n++) {
+        value_0 = this.values[lastRowIndex + n * this.m];
+        if(value_0 < min) {
+          column = n;
+          min = value_0;
+        }
+      }
+
+      if(column === -1) {
+        // console.log('finished');
+        return this;
+      }
+
+      columnIndex = column * this.m;
+      min = 1;
+      for(let m = 0; m < lastRowIndex; m++) {
+        value_0 = this.values[m + columnIndex];
+        // value_1 = this.values[m + lastColumnIndex];
+        // if((value_0 !== 0) && (Math.sign(value_0) === Math.sign(value_1))) {
+        if(value_0 > 0) {
+          ratio = this.values[m + lastColumnIndex] / value_0;
+          if((row === -1) || (ratio < min)) {
+            row = m;
+            min = ratio;
+          }
+        }
+      }
+
+      // console.log(row, column, min);
+
+      if(row === -1) {
+        // console.log('inconsistent');
+        return null;
+      }
+
+      let pivot: number = this.values[row + column * this.m];
+      for(let n = 0; n < this.n; n++) {
+        this.values[row + n * this.m] /= pivot;
+      }
+
+      this.pivot(row, column);
+
+      // console.log(this.toString());
+
+      i++;
+    }
+
+    return null;
+  }
+
 
   /**
    * This function try to divide an entire row by the best factor
