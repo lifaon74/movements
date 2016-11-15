@@ -143,12 +143,22 @@ export class ConstrainedMovement extends ConstrainedMove {
     // console.log(Matrix.getStandardMaximizationProblemSolutions(Matrix.solveStandardMaximizationProblem(matrix)).toString());
   }
 
+
   swapSpeeds() {
     let initialSpeed  = this.initialSpeed;
     this.initialSpeed = this.finalSpeed;
     this.finalSpeed   = initialSpeed;
   }
 
+  isNull(): boolean {
+    for(let i = 0; i < this.moves.length; i++) {
+      if(this.moves[i].distance !== 0) {
+        return false;
+      }
+    }
+
+    return true;
+  }
 
   /**
    * Compute and return the best reachable final speed constrained by own limits

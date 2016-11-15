@@ -116,10 +116,14 @@ class Main {
     }
 
     for(let command of commands) {
+      // if(movements.length > 10) break;
+
       switch(command.command) {
         case 'G0':
         case 'G1':
           let moves: ConstrainedMove[] = [];
+          // console.log(command.params);
+
           for(let stepper of this.config.steppers) {
             let move: ConstrainedMove = new ConstrainedMove();
             let value: number = command.params[stepper.name];
@@ -140,6 +144,7 @@ class Main {
             move.speedLimit         = stepper.speedLimit;
             move.accelerationLimit  = stepper.accelerationLimit;
             move.jerkLimit          = stepper.jerkLimit;
+            move.value              = delta;
 
             moves.push(move);
           }
@@ -169,6 +174,15 @@ class Main {
     }
 
     return movements;
+  }
+
+  reduceMovementsSequence(movements: ConstrainedMovement[]) {
+    for(let i = 0; i < movements.length; i++) {
+      if(movements[i].isNull()) {
+        movements.splice(i, 1);
+        i--;
+      }
+    }
   }
 
   optimizeMovementsSequence(movements: ConstrainedMovement[]) {
@@ -383,19 +397,37 @@ let main = new Main(CONFIG);
 //   simpleMovement(stepsPerTurn, -stepsPerTurn)
 // ];
 
-let movements: any[] = [];
-for(let i = 0; i < 100000; i++) {
-  movements.push(simpleMovement(stepsPerTurn, stepsPerTurn));
-}
-
-let t1 = process.hrtime();
-main.optimizeMovementsSequence(movements);
-let t2 = process.hrtime(t1);
-console.log(t2[0] + t2[1] / 1e9);
+// let movements: any[] = [];
+// for(let i = 0; i < 10; i++) {
+//   movements.push(simpleMovement(stepsPerTurn, stepsPerTurn));
+// }
+//
+// let t1 = process.hrtime();
+// main.optimizeMovementsSequence(movements);
+// let t2 = process.hrtime(t1);
+// console.log(t2[0] + t2[1] / 1e9);
 // main.parseMovement(movements);
 
+// let file = 'thin_tower';
+let file = 'fruit_200mm';
+
+main.parseFile('../assets/' + file + '.gcode').then((movements: ConstrainedMovement[]) => {
+
+  console.log('nb', movements.length);
+  main.reduceMovementsSequence(movements);
+
+  let t1 = process.hrtime();
+  main.optimizeMovementsSequence(movements);
+  let t2 = process.hrtime(t1);
+  console.log('time', t2[0] + t2[1] / 1e9);
 
 
+  movements = movements.slice(0, 10);
+
+  movements.forEach((movement: ConstrainedMovement) => {
+    console.log(movement.speedLimit * movement.moves[0].value);
+  });
+});
 
 
 // movements.forEach((movement: Movement) => {
@@ -415,10 +447,4 @@ console.log(t2[0] + t2[1] / 1e9);
 // console.log(main.convertMovement(movement));
 
 
-// main.parseFile('../assets/thin_tower.gcode').then((movements: Movement[]) => {
-//   movements.slice(8, 8 + 1).forEach((movement: Movement) => {
-//     console.log(movement.toString());
-//     // movement.convertMovement();
-//   });
-//   // console.log(main.convertMovement(movements[1]));
-// });
+
