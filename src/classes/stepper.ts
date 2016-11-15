@@ -8,6 +8,8 @@ export class Stepper {
 }
 
 export class StepperMove {
+  public stepper: Stepper;
+
   public direction: number; // 1 or -1
   public steps: number;
 
@@ -17,8 +19,9 @@ export class StepperMove {
   public stepped: number = 0;
 
 
-  constructor(public stepper: Stepper,
+  constructor(stepper: Stepper,
               value: number) {
+    this.stepper = stepper;
     this.value = value;
   }
 

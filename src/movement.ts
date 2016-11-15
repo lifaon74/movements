@@ -1,9 +1,11 @@
-import { GCODEParser } from './gcodeParser';
+import { GCODEParser, GCODECommand } from './gcodeParser';
 import { Stepper, StepperMove } from './classes/stepper';
 import { Movement } from './classes/movement';
 import { TransitionMove } from './classes/transitionMove';
+import { Matrix } from './classes/matrix.class';
+import { ConstrainedMovement, ConstrainedMove } from './classes/kinematics';
 
-var NanoTimer = require('nanotimer');
+let NanoTimer = require('nanotimer');
 
 
 class Vector3D {
@@ -70,9 +72,10 @@ class Move {
 
 const stepsPerTurn = 6400;
 
-const ACCELERATION_LIMIT = stepsPerTurn / 1;
+const ACCELERATION_LIMIT = stepsPerTurn / 4;
 const SPEED_LIMIT = stepsPerTurn / 1;
 const JERK_LIMIT = stepsPerTurn / 4;
+
 
 
 interface ICONFIG {
@@ -95,77 +98,112 @@ class Main {
   constructor(private config: any) {
   }
 
-  parseFile(path: string): Promise<any> {
-    return GCODEParser.parseFile(path).then((commands: any[]) => {
-      let movements: Movement[] = [];
-
-      let localConfig: any = {
-        unitFactor: 1, // 1 for millimeters, 25.4 for inches,
-        absolutePosition: true,
-        position: {}
-      };
-
-      for(let stepper of this.config.steppers) {
-        localConfig.position[stepper.name] = 0;
-      }
-
-
-      commands.forEach((command: any) => {
-        switch(command.command) {
-          case 'G0':
-          case 'G1':
-            let movement = new Movement();
-
-            for(let stepper of this.config.steppers) {
-              let value: number = command.params[stepper.name];
-              let delta: number = 0;
-
-              if(typeof value === 'number') {
-                value = value * localConfig.unitFactor * stepper.stepsPerMm; // convert value to steps
-
-                if(localConfig.absolutePosition) {
-                  delta = (value - localConfig.position[stepper.name]);
-                  localConfig.position[stepper.name] = value;
-                } else {
-                  delta = value;
-                  localConfig.position[stepper.name] += value;
-                }
-              }
-
-              movement.moves.push(new StepperMove(
-                stepper,
-                delta
-              ));
-            }
-
-            movements.push(movement);
-            break;
-
-          case 'G20': // unit = inches
-            localConfig.unitFactor = 25.4;
-            break;
-          case 'G21': // unit = millimeters
-            localConfig.unitFactor = 1;
-            break;
-
-          case 'G90': // absolute position
-            localConfig.absolutePosition = true;
-            break;
-          case 'G91': // relative position
-            localConfig.absolutePosition = false;
-            break;
-          case 'G92': // define position
-            for(let stepper of this.config.steppers) {
-              localConfig.position[stepper.name] = command.params[stepper.name] || 0;
-            }
-            break;
-        }
-      });
-
-      return movements;
-    });
+  parseFile(path: string): Promise<ConstrainedMovement[]> {
+    return GCODEParser.parseFile(path).then(this.parseGCODECommand.bind(this));
   }
 
+  parseGCODECommand(commands: GCODECommand[]): ConstrainedMovement[] {
+    let movements: ConstrainedMovement[] = [];
+
+    let localConfig: any = {
+      unitFactor: 1, // 1 for millimeters, 25.4 for inches,
+      absolutePosition: true,
+      position: {}
+    };
+
+    for(let stepper of this.config.steppers) {
+      localConfig.position[stepper.name] = 0;
+    }
+
+    for(let command of commands) {
+      switch(command.command) {
+        case 'G0':
+        case 'G1':
+          let moves: ConstrainedMove[] = [];
+          for(let stepper of this.config.steppers) {
+            let move: ConstrainedMove = new ConstrainedMove();
+            let value: number = command.params[stepper.name];
+            let delta: number = 0;
+
+            if(typeof value === 'number') {
+              value = value * localConfig.unitFactor * stepper.stepsPerMm; // convert value to steps
+
+              if(localConfig.absolutePosition) {
+                delta = (value - localConfig.position[stepper.name]);
+                localConfig.position[stepper.name] = value;
+              } else {
+                delta = value;
+                localConfig.position[stepper.name] += value;
+              }
+            }
+
+            move.speedLimit         = stepper.speedLimit;
+            move.accelerationLimit  = stepper.accelerationLimit;
+            move.jerkLimit          = stepper.jerkLimit;
+
+            moves.push(move);
+          }
+
+          movements.push(new ConstrainedMovement(moves));
+          break;
+
+        case 'G20': // unit = inches
+          localConfig.unitFactor = 25.4;
+          break;
+        case 'G21': // unit = millimeters
+          localConfig.unitFactor = 1;
+          break;
+
+        case 'G90': // absolute position
+          localConfig.absolutePosition = true;
+          break;
+        case 'G91': // relative position
+          localConfig.absolutePosition = false;
+          break;
+        case 'G92': // define position
+          for(let stepper of this.config.steppers) {
+            localConfig.position[stepper.name] = command.params[stepper.name] || 0;
+          }
+          break;
+      }
+    }
+
+    return movements;
+  }
+
+  optimizeMovementsSequence(movements: ConstrainedMovement[]) {
+    // movements.forEach((move: ConstrainedMovement) => {
+    //   console.log('---');
+    //   console.log(move.speedLimit, move.accelerationLimit);
+    // });
+
+    this.computeSpeedsOfMovementsSequence(movements);
+
+    // movements.forEach((move: ConstrainedMovement) => {
+    //   console.log('---');
+    //   console.log(move.toString());
+    // });
+  }
+
+
+  private computeSpeedsOfMovementsSequence(movements: ConstrainedMovement[]) {
+    movements[0].initialSpeed = 0;
+    for(let i = 0, length = movements.length - 1; i < length; i++) {
+      movements[i].optimizeSpeeds(movements[i + 1]);
+    }
+
+    movements.forEach((movement) => movement.swapSpeeds());
+
+    movements[movements.length - 1].initialSpeed = 0;
+    for(let i = movements.length - 1; i > 1; i--) {
+      movements[i].optimizeSpeeds(movements[i - 1]);
+    }
+
+    movements.forEach((movement) => movement.swapSpeeds());
+  }
+
+
+  // old
   parseMovement(movements: Movement[]): Movement[] {
     let _movements: Movement[] = [];
 
@@ -181,48 +219,71 @@ class Main {
 
     // console.log(transitionMoves);
 
-    let currentMove: TransitionMove = transitionMoves[0];
-    let nextMove: TransitionMove;
-    let transitionSpeed:number = currentMove.initialSpeed;
-    for(let i = 0, l = transitionMoves.length; i < l - 1; i++) {
-      currentMove = transitionMoves[i];
-      nextMove = transitionMoves[i + 1] || null;
 
+    this.buildTransitionMoves(transitionMoves);
+
+    console.log('----------------------------');
+
+    transitionMoves.reverse().forEach((move: TransitionMove) => {
+      let initialSpeed  = move.initialSpeed;
+      move.initialSpeed = move.finalSpeed;
+      move.finalSpeed   = initialSpeed;
+    });
+
+    this.buildTransitionMoves(transitionMoves);
+
+    transitionMoves.reverse().forEach((move: TransitionMove) => {
+      let initialSpeed  = move.initialSpeed;
+      move.initialSpeed = move.finalSpeed;
+      move.finalSpeed   = initialSpeed;
+    });
+
+
+    transitionMoves.forEach((move: TransitionMove) => {
       console.log('---');
-
-      // console.log(Move.computeDuration(move.steps, 0, move.acceleration));
-      currentMove.initialSpeed = transitionSpeed;
-      // let's compute maximal final speed with maxAcceleration
-      currentMove.finalSpeed = Math.min(currentMove.speedLimit, Move.computeFinalSpeed(1, currentMove.initialSpeed, currentMove.accelerationLimit));
-
-
-      let maxDeltaSpeed = 0;
-      let currentStepperMove: StepperMove, nextStepperMove: StepperMove;
-      for(let j = 0, l = currentMove.moves.length; j < l; j++) {
-        currentStepperMove = currentMove.moves[j];
-        nextStepperMove = nextMove.moves[j];
-        let finalSpeed = currentStepperMove.steps * currentMove.finalSpeed;
-        let initialSpeed = nextStepperMove.steps * currentMove.finalSpeed;
-        let deltaSpeed = Math.abs(initialSpeed - finalSpeed);
-
-        if(deltaSpeed > nextStepperMove.stepper.jerkLimit) {
-          console.log('too fast');
-        }
-
-        maxDeltaSpeed = Math.max(maxDeltaSpeed, deltaSpeed);
-        console.log(finalSpeed, initialSpeed, deltaSpeed);
-      }
-
-      console.log(maxDeltaSpeed);
-      //console.log(currentMove.finalSpeed);
-      transitionSpeed = currentMove.finalSpeed;
-
-    }
-
+      console.log(move.initialSpeed, move.finalSpeed);
+    });
+    // console.log(transitionMoves);
 
 
     return _movements;
   }
+
+  buildTransitionMoves(transitionMoves: TransitionMove[]) {
+    let currentMove: TransitionMove = transitionMoves[0];
+    let nextMove: TransitionMove;
+
+    currentMove.initialSpeed = 0;
+
+    for(let i = 0, l = transitionMoves.length - 1; i < l; i++) {
+      currentMove = transitionMoves[i];
+      nextMove    = transitionMoves[i + 1] || null;
+
+      // console.log('---');
+
+      // console.log(Move.computeDuration(move.steps, 0, move.acceleration));
+
+      // let's compute maximal final speed with maxAcceleration
+      let finalSpeed = currentMove.getFinalMaximumSpeed();
+      if(currentMove.finalSpeed === null) {
+        currentMove.finalSpeed = finalSpeed;
+      } else {
+        currentMove.finalSpeed = Math.min(currentMove.finalSpeed, finalSpeed);
+      }
+
+      let matrix = TransitionMove.getMaximizationMatrix(currentMove, nextMove);
+      // console.log(matrix.toString());
+      let solutions = Matrix.getStandardMaximizationProblemSolutions(matrix.solveStandardMaximizationProblem());
+
+      currentMove.finalSpeed = solutions.values[0];
+      nextMove.initialSpeed = solutions.values[1];
+
+      // console.log(currentMove.finalSpeed, nextMove.initialSpeed);
+      // console.log(matrix.toString());
+      // console.log(Matrix.getStandardMaximizationProblemSolutions(Matrix.solveStandardMaximizationProblem(matrix)).toString());
+    }
+  }
+
 
   executeMovements(movements: Movement[], callback: (() => any)) {
     let movementIndex: number = 0;
@@ -284,65 +345,71 @@ let speedTest2 = () => {
 };
 // speedTest2();
 
+let simpleMovement = (x: number, y: number) => {
+  let move_0 = new ConstrainedMove();
+  move_0.speedLimit         = CONFIG.steppers[0].speedLimit;
+  move_0.accelerationLimit  = CONFIG.steppers[0].accelerationLimit;
+  move_0.jerkLimit          = CONFIG.steppers[0].jerkLimit;
+  move_0.value              = x;
+
+  let move_1 = new ConstrainedMove();
+  move_1.speedLimit         = CONFIG.steppers[1].speedLimit;
+  move_1.accelerationLimit  = CONFIG.steppers[1].accelerationLimit;
+  move_1.jerkLimit          = CONFIG.steppers[1].jerkLimit;
+  move_1.value              = y;
+
+  return new ConstrainedMovement([move_0, move_1]);
+
+  // return new Movement([
+  //   new StepperMove(CONFIG.steppers[0], x),
+  //   new StepperMove(CONFIG.steppers[1], y)
+  // ]);
+};
+
 /**
  * /--\
  * |  |
  * \--/
  */
 let main = new Main(CONFIG);
-let movements: Movement[] = [
-  new Movement([
-    new StepperMove(CONFIG.steppers[0], stepsPerTurn),
-    new StepperMove(CONFIG.steppers[1], 0)
-  ]),
-  new Movement([
-    new StepperMove(CONFIG.steppers[0], stepsPerTurn),
-    new StepperMove(CONFIG.steppers[1], stepsPerTurn)
-  ]),
-  new Movement([
-    new StepperMove(CONFIG.steppers[0], 0),
-    new StepperMove(CONFIG.steppers[1], stepsPerTurn)
-  ]),
-  new Movement([
-    new StepperMove(CONFIG.steppers[0], -stepsPerTurn),
-    new StepperMove(CONFIG.steppers[1], stepsPerTurn)
-  ]),
-  new Movement([
-    new StepperMove(CONFIG.steppers[0], -stepsPerTurn),
-    new StepperMove(CONFIG.steppers[1], 0)
-  ]),
-  new Movement([
-    new StepperMove(CONFIG.steppers[0], -stepsPerTurn),
-    new StepperMove(CONFIG.steppers[1], -stepsPerTurn)
-  ]),
-  new Movement([
-    new StepperMove(CONFIG.steppers[0], 0),
-    new StepperMove(CONFIG.steppers[1], -stepsPerTurn)
-  ]),
-  new Movement([
-    new StepperMove(CONFIG.steppers[0], stepsPerTurn),
-    new StepperMove(CONFIG.steppers[1], -stepsPerTurn)
-  ])
-];
+// let movements: any[] = [
+//   simpleMovement(stepsPerTurn, 0),
+//   simpleMovement(stepsPerTurn, stepsPerTurn),
+//   simpleMovement(0, stepsPerTurn),
+//   simpleMovement(-stepsPerTurn, stepsPerTurn),
+//   simpleMovement(-stepsPerTurn, 0),
+//   simpleMovement(-stepsPerTurn, -stepsPerTurn),
+//   simpleMovement(0, -stepsPerTurn),
+//   simpleMovement(stepsPerTurn, -stepsPerTurn)
+// ];
 
-//main.parseMovement(movements);
-
-
-
-
-
-movements.forEach((movement: Movement) => {
-  movement.moves.forEach((move: StepperMove) => {
-    move.acceleration = 0;
-    move.initialSpeed = move.stepper.speedLimit;
-  });
-});
+let movements: any[] = [];
+for(let i = 0; i < 100000; i++) {
+  movements.push(simpleMovement(stepsPerTurn, stepsPerTurn));
+}
 
 let t1 = process.hrtime();
-main.executeMovements(movements, () => {
-  let t = process.hrtime(t1);
-  console.log(t);
-});
+main.optimizeMovementsSequence(movements);
+let t2 = process.hrtime(t1);
+console.log(t2[0] + t2[1] / 1e9);
+// main.parseMovement(movements);
+
+
+
+
+
+// movements.forEach((movement: Movement) => {
+//   movement.moves.forEach((move: StepperMove) => {
+//     move.acceleration = 0;
+//     move.initialSpeed = move.stepper.speedLimit;
+//   });
+// });
+//
+// let t1 = process.hrtime();
+// main.executeMovements(movements, () => {
+//   let t = process.hrtime(t1);
+//   console.log(t);
+// });
 
 // console.log(CONFIG.steppers[0].movement(1e4));
 // console.log(main.convertMovement(movement));

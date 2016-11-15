@@ -280,6 +280,11 @@ export class Matrix {
   }
 
 
+
+  static solveStandardMaximizationProblem(matrix: Matrix): Matrix {
+    return Matrix.fromMatrix(matrix).solveStandardMaximizationProblem();
+  }
+
   /**
    * Return the formatted solutions from solved matrix of a standard maximization problem
    *

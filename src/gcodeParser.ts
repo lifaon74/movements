@@ -1,5 +1,12 @@
 const fs = require('fs');
 
+export interface GCODECommand {
+  comment?: string;
+  command?: string;
+  params?: {
+    [key: string]: number
+  };
+}
 
 export class GCODEParser {
   static parseFile(path: string): Promise<any> {
@@ -18,7 +25,7 @@ export class GCODEParser {
   static parse(gcode: string): any[] {
     let commands:string[] = gcode.split(/\r?\n/);
     return commands.map((command: string) => {
-      let commandObject:any = {};
+      let commandObject:GCODECommand = {};
 
       let commentMatch = /;(.*)$/.exec(command);
       if(commentMatch) {
