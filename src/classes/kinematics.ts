@@ -269,7 +269,24 @@ export class ConstrainedMovement extends ConstrainedMove {
 
 
   decompose() {
+    // console.log(this.initialSpeed, this.finalSpeed);
+    let topMaximumSpeedTime: number = this.getTopMaximumSpeedTime();
+    let topMaximumSpeed = topMaximumSpeedTime * this.accelerationLimit + this.initialSpeed;
+    if(topMaximumSpeed <= this.speedLimit) {
+      console.log('max', topMaximumSpeedTime, topMaximumSpeed);
+    }
 
+  }
+
+  /**
+   * Compute time to reach the highest speed without limit,
+   * according to the accelerationLimit
+   * @returns {number}
+   */
+  getTopMaximumSpeedTime(): number {
+    let speedsSum = this.initialSpeed + this.finalSpeed;
+    return (Math.sqrt(speedsSum * speedsSum + 4 * this.accelerationLimit) - speedsSum)
+      / (2 * this.accelerationLimit);
   }
 
   // computeAccelerationTime(): number { // time to reach maximum initialSpeed
