@@ -1,14 +1,10 @@
 import { Matrix } from './classes/matrix.class';
+import { Float } from './classes/float.class';
 
 
 let rand = () => {
   return Math.floor(Math.random() * 10 - 5);
   //return Math.random();
-};
-
-// Number.EPSILON
-let areEquals = (number_0: number, number_1: number, precision: number = 1e-3): boolean => {
-  return Math.abs(number_0 - number_1) < precision;
 };
 
 let buildRandomMatrix = (number: number, size: number): Matrix[] => {
@@ -97,7 +93,7 @@ if(!Matrix.areEquals(Matrix.pivot(Matrix.fromArray([
 if(!Matrix.areEquals(Matrix.solveSystemOfEquationsProblem(d), Matrix.solveSystemOfEquationsProblem(Matrix.fromArray([
     [-8, 1, 2],
     [ 3, 4, 1]
-  ])), areEquals)) {
+  ])), (a, b) => { return Float.equals(a, b, 1e-3); })) {
   throw new Error('solve 1 does\'nt pass');
 }
 
@@ -112,7 +108,7 @@ if(!Matrix.areEquals(Matrix.solveSystemOfEquationsProblem(e), Matrix.fromArray([
     [1, 0, 0, 1],
     [0, 1, 0, 2],
     [0, 0, 1, -1]
-  ]), areEquals)) {
+  ]), (a, b) => { return Float.equals(a, b, 1e-3); })) {
   throw new Error('solve 2 does\'nt pass');
 }
 

@@ -72,8 +72,8 @@ class Move {
 
 const stepsPerTurn = 6400;
 
-const ACCELERATION_LIMIT = stepsPerTurn / 4;
-const SPEED_LIMIT = stepsPerTurn / 1;
+const ACCELERATION_LIMIT = stepsPerTurn / 0.5;
+const SPEED_LIMIT = stepsPerTurn / 1; // 1 turn / s
 const JERK_LIMIT = stepsPerTurn / 4;
 
 
@@ -183,6 +183,17 @@ class Main {
         i--;
       }
     }
+
+    let currentMovement: ConstrainedMovement, nextMovement: ConstrainedMovement;
+    for(let i = 0; i < movements.length - 1; i++) {
+      currentMovement = movements[i];
+      nextMovement    = movements[i + 1];
+
+      if(ConstrainedMovement.areStronglyCorrelated(currentMovement, nextMovement)) {
+        movements.splice(i, 2, ConstrainedMovement.merge(currentMovement, nextMovement));
+        i--;
+      }
+    }
   }
 
   optimizeMovementsSequence(movements: ConstrainedMovement[]) {
@@ -191,112 +202,47 @@ class Main {
     //   console.log(move.speedLimit, move.accelerationLimit);
     // });
 
-    this.computeSpeedsOfMovementsSequence(movements);
+
+    let t1 = process.hrtime();
+    this.computeTransitionSpeedsOfMovementsSequence(movements);
+    let t2 = process.hrtime(t1);
+    console.log('optimized in', t2[0] + t2[1] / 1e9);
 
     // movements.forEach((move: ConstrainedMovement) => {
     //   console.log('---');
     //   console.log(move.toString());
     // });
+
+
   }
 
 
-  private computeSpeedsOfMovementsSequence(movements: ConstrainedMovement[]) {
+  /**
+   * Compute best initial and finals speeds of ConstrainedMovement
+   * @param movements
+   */
+  computeTransitionSpeedsOfMovementsSequence(movements: ConstrainedMovement[]) {
     movements[0].initialSpeed = 0;
     for(let i = 0, length = movements.length - 1; i < length; i++) {
-      movements[i].optimizeSpeeds(movements[i + 1]);
+      movements[i].optimizeTransitionSpeeds(movements[i + 1]);
     }
 
-    movements.forEach((movement) => movement.swapSpeeds());
+    movements.forEach((movement) => movement.swapTransitionSpeeds());
 
     movements[movements.length - 1].initialSpeed = 0;
     for(let i = movements.length - 1; i > 1; i--) {
-      movements[i].optimizeSpeeds(movements[i - 1]);
+      movements[i].optimizeTransitionSpeeds(movements[i - 1]);
     }
 
-    movements.forEach((movement) => movement.swapSpeeds());
+    movements.forEach((movement) => movement.swapTransitionSpeeds());
   }
 
-
-  // old
-  parseMovement(movements: Movement[]): Movement[] {
-    let _movements: Movement[] = [];
-
-
-    let transitionMoves: TransitionMove[] = [];
-    let movement: Movement;
-    for(let i = 0, l = movements.length; i < l; i++) {
-      movement = movements[i];
-      let move = movement.getTransitionMove();
-      // console.log((move.initialSpeed + ' - ' + move.acceleration + ' - ' + move.instantSpeed));
-      transitionMoves.push(move);
-    }
-
-    // console.log(transitionMoves);
-
-
-    this.buildTransitionMoves(transitionMoves);
-
-    console.log('----------------------------');
-
-    transitionMoves.reverse().forEach((move: TransitionMove) => {
-      let initialSpeed  = move.initialSpeed;
-      move.initialSpeed = move.finalSpeed;
-      move.finalSpeed   = initialSpeed;
-    });
-
-    this.buildTransitionMoves(transitionMoves);
-
-    transitionMoves.reverse().forEach((move: TransitionMove) => {
-      let initialSpeed  = move.initialSpeed;
-      move.initialSpeed = move.finalSpeed;
-      move.finalSpeed   = initialSpeed;
-    });
-
-
-    transitionMoves.forEach((move: TransitionMove) => {
-      console.log('---');
-      console.log(move.initialSpeed, move.finalSpeed);
-    });
-    // console.log(transitionMoves);
-
-
-    return _movements;
-  }
-
-  buildTransitionMoves(transitionMoves: TransitionMove[]) {
-    let currentMove: TransitionMove = transitionMoves[0];
-    let nextMove: TransitionMove;
-
-    currentMove.initialSpeed = 0;
-
-    for(let i = 0, l = transitionMoves.length - 1; i < l; i++) {
-      currentMove = transitionMoves[i];
-      nextMove    = transitionMoves[i + 1] || null;
-
-      // console.log('---');
-
-      // console.log(Move.computeDuration(move.steps, 0, move.acceleration));
-
-      // let's compute maximal final speed with maxAcceleration
-      let finalSpeed = currentMove.getFinalMaximumSpeed();
-      if(currentMove.finalSpeed === null) {
-        currentMove.finalSpeed = finalSpeed;
-      } else {
-        currentMove.finalSpeed = Math.min(currentMove.finalSpeed, finalSpeed);
-      }
-
-      let matrix = TransitionMove.getMaximizationMatrix(currentMove, nextMove);
-      // console.log(matrix.toString());
-      let solutions = Matrix.getStandardMaximizationProblemSolutions(matrix.solveStandardMaximizationProblem());
-
-      currentMove.finalSpeed = solutions.values[0];
-      nextMove.initialSpeed = solutions.values[1];
-
-      // console.log(currentMove.finalSpeed, nextMove.initialSpeed);
-      // console.log(matrix.toString());
-      // console.log(Matrix.getStandardMaximizationProblemSolutions(Matrix.solveStandardMaximizationProblem(matrix)).toString());
+  decomposeMovementsSequence(movements: ConstrainedMovement[]) {
+    for(let movement of movements) {
+      movement.decompose();
     }
   }
+
 
 
   executeMovements(movements: Movement[], callback: (() => any)) {
@@ -386,7 +332,16 @@ let simpleMovement = (x: number, y: number) => {
  * \--/
  */
 let main = new Main(CONFIG);
-// let movements: any[] = [
+let movements: any[] = [];
+
+for(let i = 0; i < 10; i++) {
+  // let factor = ((i % 2) === 0) ? 1 : -1;
+  let factor = 1;
+  // let factor = Math.random();
+  movements.push(simpleMovement(stepsPerTurn * factor, stepsPerTurn * factor));
+}
+
+// movements = [
 //   simpleMovement(stepsPerTurn, 0),
 //   simpleMovement(stepsPerTurn, stepsPerTurn),
 //   simpleMovement(0, stepsPerTurn),
@@ -397,37 +352,43 @@ let main = new Main(CONFIG);
 //   simpleMovement(stepsPerTurn, -stepsPerTurn)
 // ];
 
-// let movements: any[] = [];
-// for(let i = 0; i < 10; i++) {
-//   movements.push(simpleMovement(stepsPerTurn, stepsPerTurn));
-// }
-//
+// main.reduceMovementsSequence(movements);
+main.optimizeMovementsSequence(movements);
+main.decomposeMovementsSequence(movements);
+
+movements.forEach((movement: ConstrainedMovement) => {
+  console.log(movement.toString(), ' === ', movement.toString('speeds'));
+});
+
+
+
+
 // let t1 = process.hrtime();
 // main.optimizeMovementsSequence(movements);
 // let t2 = process.hrtime(t1);
 // console.log(t2[0] + t2[1] / 1e9);
 // main.parseMovement(movements);
 
-// let file = 'thin_tower';
-let file = 'fruit_200mm';
+let file = 'thin_tower';
+// let file = 'fruit_200mm';
 
-main.parseFile('../assets/' + file + '.gcode').then((movements: ConstrainedMovement[]) => {
-
-  console.log('nb', movements.length);
-  main.reduceMovementsSequence(movements);
-
-  let t1 = process.hrtime();
-  main.optimizeMovementsSequence(movements);
-  let t2 = process.hrtime(t1);
-  console.log('time', t2[0] + t2[1] / 1e9);
-
-
-  movements = movements.slice(0, 10);
-
-  movements.forEach((movement: ConstrainedMovement) => {
-    console.log(movement.speedLimit * movement.moves[0].value);
-  });
-});
+// main.parseFile('../assets/' + file + '.gcode').then((movements: ConstrainedMovement[]) => {
+//
+//   console.log('nb', movements.length);
+//   main.reduceMovementsSequence(movements);
+//
+//   let t1 = process.hrtime();
+//   main.optimizeMovementsSequence(movements);
+//   let t2 = process.hrtime(t1);
+//   console.log('time', t2[0] + t2[1] / 1e9);
+//
+//
+//   movements = movements.slice(0, 10);
+//
+//   movements.forEach((movement: ConstrainedMovement) => {
+//     console.log(movement.toString(), ' === ', movement.toString('speeds'));
+//   });
+// });
 
 
 // movements.forEach((movement: Movement) => {

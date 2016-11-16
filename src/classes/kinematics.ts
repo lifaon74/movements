@@ -1,4 +1,5 @@
 import { Matrix } from './matrix.class';
+import { Float } from './float.class';
 
 /**
  * Represent a move constrained by speed and acceleration
@@ -27,15 +28,41 @@ export class ConstrainedMove {
     this.distance = Math.abs(value);
     this.direction = Math.sign(value) || 1;
   }
+
+  /**
+   * Compute distance according to time
+   */
+  computeDistance(time: number): number {
+    return 0.5 * this.accelerationLimit * time * time + this.initialSpeed * time;
+  }
+
+
+  toString(type: string = 'value'): string {
+    switch(type) {
+      case 'speed':
+        return this.initialSpeed + ' ' + this.finalSpeed;
+      case 'value':
+      default:
+        return this.value.toString();
+    }
+
+  }
 }
+
 
 /**
  * A Movement is a set of entangled Moves
  *
- * A ConstrainedMovement normalized its moves to provide easier computing
+ * A ConstrainedMovement normalizes its moves to provide easier computing
  */
 export class ConstrainedMovement extends ConstrainedMove {
 
+  /**
+   * Build the maximization matrix which links 2 ConstrainedMove
+   * @param movement_0
+   * @param movement_1
+   * @returns {Matrix}
+   */
   static getMaximizationMatrix(movement_0: ConstrainedMovement, movement_1: ConstrainedMovement): Matrix {
     // 2 per axes
     // + 2 for max values
@@ -90,6 +117,86 @@ export class ConstrainedMovement extends ConstrainedMove {
     return matrix;
   }
 
+  /**
+   * Check if 2 ConstrainedMove are correlated (same direction and correlated moves)
+   * @param movement_0
+   * @param movement_1
+   * @param precision
+   * @returns {boolean}
+   */
+  static areCorrelated(movement_0: ConstrainedMovement, movement_1: ConstrainedMovement, precision: number = Float.EPSILON_32): boolean {
+    let move_0: ConstrainedMove = movement_0.moves[0], move_1: ConstrainedMove = movement_1.moves[0];
+    let factor: number = move_0.value / move_1.value;
+
+    for(let i = 1; i < movement_0.moves.length; i++) {
+      move_0 = movement_0.moves[i];
+      move_1 = movement_1.moves[i];
+
+      if(
+        (move_0.direction !== move_1.direction) ||
+        !Float.equals(factor, move_0.value / move_1.value, precision)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Check if 2 ConstrainedMove are correlated and have the same constraints
+   * @param movement_0
+   * @param movement_1
+   * @param precision
+   * @returns {boolean}
+   */
+  static areStronglyCorrelated(movement_0: ConstrainedMovement, movement_1: ConstrainedMovement, precision: number = Float.EPSILON_32): boolean {
+    if(!ConstrainedMovement.areCorrelated(movement_0, movement_1, precision)) {
+      return false;
+    }
+
+    let move_0: ConstrainedMove, move_1: ConstrainedMove;
+    for(let i = 0; i < movement_0.moves.length; i++) {
+      move_0 = movement_0.moves[i];
+      move_1 = movement_1.moves[i];
+
+      if(
+        !Float.equals(move_0.speedLimit, move_1.speedLimit, precision) ||
+        !Float.equals(move_0.accelerationLimit, move_1.accelerationLimit, precision) ||
+        !Float.equals(move_0.jerkLimit, move_1.jerkLimit, precision)
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Merge 2 correlated ConstrainedMove as 1
+   * @param movement_0
+   * @param movement_1
+   * @returns {ConstrainedMovement}
+   */
+  static merge(movement_0: ConstrainedMovement, movement_1: ConstrainedMovement): ConstrainedMovement {
+    let moves: ConstrainedMove[] = [];
+    let move_0: ConstrainedMove;
+    let mergeMove: ConstrainedMove;
+    for(let j = 0; j < movement_0.moves.length; j++) {
+      move_0 = movement_0.moves[j];
+
+      mergeMove = new ConstrainedMove();
+      mergeMove.speedLimit         = move_0.speedLimit;
+      mergeMove.accelerationLimit  = move_0.accelerationLimit;
+      mergeMove.jerkLimit          = move_0.jerkLimit;
+      mergeMove.value              = move_0.value + movement_1.moves[j].value;
+
+      moves.push(mergeMove);
+    }
+
+    return new ConstrainedMovement(moves);
+  }
+
+
 
   constructor(public moves: ConstrainedMove[]) {
     super();
@@ -118,10 +225,22 @@ export class ConstrainedMovement extends ConstrainedMove {
     return accelerationLimit;
   }
 
+  /**
+   * Return true if the movement is null (its distance equals 0)
+   * @param precision
+   * @returns {boolean}
+   */
+  isNull(precision: number = Float.EPSILON_32): boolean {
+    for(let i = 0; i < this.moves.length; i++) {
+      if(!Float.isNull(this.moves[i].distance, precision)) {
+        return false;
+      }
+    }
+    return true;
+  }
 
 
-  optimizeSpeeds(nextMovement: ConstrainedMovement) {
-    // let's compute maximal final speed with maxAcceleration
+  optimizeTransitionSpeeds(nextMovement: ConstrainedMovement) {
     let finalSpeed = this.getFinalMaximumSpeed();
     
     if(this.finalSpeed === null) {
@@ -138,27 +257,32 @@ export class ConstrainedMovement extends ConstrainedMove {
 
     // nextMovement.initialSpeed = this.finalSpeed;
 
-    // console.log(currentMove.finalSpeed, nextMove.initialSpeed);
+    // console.log(this.finalSpeed, nextMove.initialSpeed);
     // console.log(matrix.toString());
-    // console.log(Matrix.getStandardMaximizationProblemSolutions(Matrix.solveStandardMaximizationProblem(matrix)).toString());
   }
 
-
-  swapSpeeds() {
+  swapTransitionSpeeds() {
     let initialSpeed  = this.initialSpeed;
     this.initialSpeed = this.finalSpeed;
     this.finalSpeed   = initialSpeed;
   }
 
-  isNull(): boolean {
-    for(let i = 0; i < this.moves.length; i++) {
-      if(this.moves[i].distance !== 0) {
-        return false;
-      }
-    }
 
-    return true;
+  decompose() {
+
   }
+
+  // computeAccelerationTime(): number { // time to reach maximum initialSpeed
+  //   if(this.accelerationLimit === 0) {
+  //     return 0;
+  //   } else {
+  //     return Math.min(
+  //       this.initialSpeed / this.acceleration,
+  //       Math.sqrt(this.steps / this.acceleration)
+  //     );
+  //   }
+  // }
+
 
   /**
    * Compute and return the best reachable final speed constrained by own limits
@@ -172,7 +296,15 @@ export class ConstrainedMovement extends ConstrainedMove {
     );
   }
 
-  toString() {
-    return this.initialSpeed + ' ' + this.finalSpeed;
+  toString(type: string = 'values'): string {
+    switch(type) {
+      case 'values':
+        return this.moves.map((move) => { return move.toString('value'); }).join(', ');
+      case 'speeds':
+        return this.moves.map((move) => { return (move.value * this.initialSpeed) + ' | ' + (move.value * this.finalSpeed); }).join(', ');
+      default:
+        return super.toString(type);
+    }
   }
+
 }
