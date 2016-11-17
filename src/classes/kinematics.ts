@@ -36,6 +36,17 @@ export class ConstrainedMove {
     return 0.5 * this.accelerationLimit * time * time + this.initialSpeed * time;
   }
 
+  clone(): ConstrainedMove {
+    let move: ConstrainedMove = new ConstrainedMove();
+    move.direction          = this.direction;
+    move.distance           = this.distance;
+    move.initialSpeed       = this.initialSpeed;
+    move.finalSpeed         = this.finalSpeed;
+    move.speedLimit         = this.speedLimit;
+    move.accelerationLimit  = this.accelerationLimit;
+    move.jerkLimit          = this.jerkLimit;
+    return move;
+  }
 
   toString(type: string = 'value'): string {
     switch(type) {
@@ -239,7 +250,6 @@ export class ConstrainedMovement extends ConstrainedMove {
     return true;
   }
 
-
   optimizeTransitionSpeeds(nextMovement: ConstrainedMovement) {
     let finalSpeed = this.getFinalMaximumSpeed();
     
@@ -261,6 +271,7 @@ export class ConstrainedMovement extends ConstrainedMove {
     // console.log(matrix.toString());
   }
 
+
   swapTransitionSpeeds() {
     let initialSpeed  = this.initialSpeed;
     this.initialSpeed = this.finalSpeed;
@@ -268,37 +279,73 @@ export class ConstrainedMovement extends ConstrainedMove {
   }
 
 
-  decompose() {
-    // console.log(this.initialSpeed, this.finalSpeed);
-    let topMaximumSpeedTime: number = this.getTopMaximumSpeedTime();
-    let topMaximumSpeed = topMaximumSpeedTime * this.accelerationLimit + this.initialSpeed;
-    if(topMaximumSpeed <= this.speedLimit) {
-      console.log('max', topMaximumSpeedTime, topMaximumSpeed);
-    }
-
-  }
-
   /**
-   * Compute time to reach the highest speed without limit,
-   * according to the accelerationLimit
-   * @returns {number}
+   * Split this movement into optimized movements (full acceleration, constant speed and full deceleration)
+   * t0, t2, t1
+   * d0, d2, d1
    */
-  getTopMaximumSpeedTime(): number {
-    let speedsSum = this.initialSpeed + this.finalSpeed;
-    return (Math.sqrt(speedsSum * speedsSum + 4 * this.accelerationLimit) - speedsSum)
-      / (2 * this.accelerationLimit);
+  decompose(movements: ConstrainedMovement[]) {
+    // compute time to reach the highest speed (not limited to speedLimit),
+    // according to the accelerationLimit
+    let ta =  (Math.sqrt(
+      (this.initialSpeed * this.initialSpeed + this.finalSpeed * this.finalSpeed) / 2 +
+      this.accelerationLimit /* * this.distance */
+    ) - this.initialSpeed) / this.accelerationLimit;
+    let tb = ta + (this.initialSpeed - this.finalSpeed) / this.accelerationLimit;
+
+    let t0 = Math.min(ta, (this.speedLimit - this.initialSpeed) / this.accelerationLimit);
+    let t1 = Math.min(tb, (this.speedLimit - this.finalSpeed) / this.accelerationLimit);
+
+    let v0_max = this.accelerationLimit * t0 + this.initialSpeed;
+    let v1_max = this.accelerationLimit * t1 + this.finalSpeed;
+
+    let d0 = 0.5 * this.accelerationLimit * t0 * t0 + this.initialSpeed * t0;
+    let d1 = 0.5 * this.accelerationLimit * t1 * t1 + this.finalSpeed * t1;
+    let d2 = 1 - d0 - d1;
+
+    let t2 = d2 / v0_max;
+
+
+    // console.log('=>', a + b, b - a);
+    console.log('t=>', t0, t1, t2);
+    console.log('v=>', v0_max, v1_max);
+
+    console.log('d=>', d0, d1, d2, Float.round(d2, 1e-9));
+    console.log('--');
+
+    if((t0 === 0) && (t1 === 0)) {
+      movements.push(this);
+    } else {
+      // let move: ConstrainedMove = this.moves[0];
+
+      let movement: ConstrainedMovement;
+      let moves: ConstrainedMove[];
+      let decomposedMove: ConstrainedMove;
+
+      moves = [];
+      for(let move of this.moves) {
+        decomposedMove = move.clone();
+        decomposedMove.distance *= d0;
+        moves.push(decomposedMove);
+      }
+      movement = new ConstrainedMovement(moves);
+      movements.push(movement);
+
+      movement.initialSpeed = this.initialSpeed;
+      movement.finalSpeed = v0_max;
+
+
+      // moves = [];
+      // for(let move of this.moves) {
+      //   decomposedMove = move.clone();
+      //   decomposedMove.distance *= d0;
+      //   moves.push(decomposedMove);
+      // }
+      // movements.push(new ConstrainedMovement(moves));
+
+    }
   }
 
-  // computeAccelerationTime(): number { // time to reach maximum initialSpeed
-  //   if(this.accelerationLimit === 0) {
-  //     return 0;
-  //   } else {
-  //     return Math.min(
-  //       this.initialSpeed / this.acceleration,
-  //       Math.sqrt(this.steps / this.acceleration)
-  //     );
-  //   }
-  // }
 
 
   /**

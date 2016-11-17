@@ -31,14 +31,14 @@ export class Float {
   }
 
   static floor(number: number, precision: number = Float.DEFAULT_PRECISION) {
-    return Math.floor(a / precision) * precision;
+    return Math.floor(number / precision) * precision;
   }
 
   static round(number: number, precision: number = Float.DEFAULT_PRECISION) {
-    return Math.round(a / precision) * precision;
+    return Math.round(number / precision) * precision;
   }
 
   static ceil(number: number, precision: number = Float.DEFAULT_PRECISION) {
-    return Math.ceil(a / precision) * precision;
+    return Math.ceil(number / precision) * precision;
   }
 }

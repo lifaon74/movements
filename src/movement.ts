@@ -70,9 +70,9 @@ class Move {
 }
 
 
-const stepsPerTurn = 6400;
+const stepsPerTurn = 6400;//6400
 
-const ACCELERATION_LIMIT = stepsPerTurn / 0.5;
+const ACCELERATION_LIMIT = stepsPerTurn / 4;
 const SPEED_LIMIT = stepsPerTurn / 1; // 1 turn / s
 const JERK_LIMIT = stepsPerTurn / 4;
 
@@ -237,10 +237,12 @@ class Main {
     movements.forEach((movement) => movement.swapTransitionSpeeds());
   }
 
-  decomposeMovementsSequence(movements: ConstrainedMovement[]) {
+  decomposeMovementsSequence(movements: ConstrainedMovement[]): ConstrainedMovement[] {
+    let _movements: ConstrainedMovement[] = [];
     for(let movement of movements) {
-      movement.decompose();
+      movement.decompose(_movements);
     }
+    return _movements;
   }
 
 
@@ -334,7 +336,7 @@ let simpleMovement = (x: number, y: number) => {
 let main = new Main(CONFIG);
 let movements: any[] = [];
 
-for(let i = 0; i < 10; i++) {
+for(let i = 0; i < 3; i++) {
   // let factor = ((i % 2) === 0) ? 1 : -1;
   let factor = 1;
   // let factor = Math.random();
@@ -354,7 +356,14 @@ for(let i = 0; i < 10; i++) {
 
 // main.reduceMovementsSequence(movements);
 main.optimizeMovementsSequence(movements);
-main.decomposeMovementsSequence(movements);
+
+movements.forEach((movement: ConstrainedMovement) => {
+  console.log(movement.toString(), ' === ', movement.toString('speed'));
+});
+
+console.log('---------------------');
+
+movements = main.decomposeMovementsSequence(movements);
 
 movements.forEach((movement: ConstrainedMovement) => {
   console.log(movement.toString(), ' === ', movement.toString('speeds'));
