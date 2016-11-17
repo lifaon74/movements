@@ -7,8 +7,8 @@ export class Stepper {
   }
 }
 
+
 export class StepperMove {
-  public stepper: Stepper;
 
   public direction: number; // 1 or -1
   public steps: number;
@@ -19,10 +19,7 @@ export class StepperMove {
   public stepped: number = 0;
 
 
-  constructor(stepper: Stepper,
-              value: number) {
-    this.stepper = stepper;
-    this.value = value;
+  constructor() {
   }
 
   get value(): number {
@@ -34,56 +31,42 @@ export class StepperMove {
     this.direction = Math.sign(value) || 1;
   }
 
-
-
-
-
-
-
-  // test
-
-  computeLimitSpeeds() {
-    // this.startSpeed = this.stepper.instantSpeed;
-    // this.endSpeed = this.startSpeed * t + 0.5 * this.acceleration * t * t;
-  }
-
-
-  /**
-   * Compute distance according to time
-   */
-  computeSteps(time: number): number {
-    return 0.5 * this.acceleration * time * time + this.initialSpeed * time;
-  }
-
-
-  computeAccelerationTime(): number { // time to reach maximum initialSpeed
-    if(this.acceleration === 0) {
-      return 0;
-    } else {
-      return Math.min(
-        this.initialSpeed / this.acceleration,
-        Math.sqrt(this.steps / this.acceleration)
-      );
-    }
-  }
-
-  getMovement() {
-    let t = this.computeAccelerationTime();
-    let d = (this.acceleration / 2) * t * t;
-    let dv = this.steps - (d * 2);
-    let tv = (this.initialSpeed === 0) ? 0 : (dv / this.initialSpeed);
-
-    // console.log(this.value / this.initialSpeed);
-    // console.log(t, d, dv, tv);
-    return [
-      [d * this.direction, t],
-      [dv * this.direction, tv],
-      [d * this.direction, t]
-    ];
-  }
-
-
   toString(): string {
-    return this.stepper.name + ': ' + this.value;
+    return '{ d: ' + this.value + ', v: ' + this.initialSpeed + ', a: ' + this.acceleration + ' }';
   }
 }
+
+
+export class StepperMovement {
+  constructor(public moves: StepperMove[] = []) {
+  }
+
+  ended(): boolean {
+    for(let i = 0, l = this.moves.length; i < l; i++) {
+      if(this.moves[i].stepped < this.moves[i].steps) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  tick(time: number): number {
+    let accelerationFactor: number = 0.5 * time * time;
+    let move: StepperMove;
+    let stepsByte: number = 0 | 0;
+    for(let i = 0, length = this.moves.length; i < length; i++) {
+      move = this.moves[i];
+      let steps = Math.min(move.steps, Math.round(move.acceleration * accelerationFactor + move.initialSpeed * time));
+      let deltaSteps = (steps - move.stepped) ? 1 : 0;
+      stepsByte |= deltaSteps << i;
+      move.stepped += deltaSteps;
+    }
+
+    return stepsByte;
+  }
+
+  toString(): string {
+    return this.moves.map((move) => { return move.toString(); }).join(', ');
+  }
+}
+
