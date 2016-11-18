@@ -421,8 +421,6 @@ export class ConstrainedMovement extends ConstrainedMove {
 }
 
 
-
-
 export class ConstrainedMovesSequence {
 
   public values: Float64Array;
@@ -437,16 +435,16 @@ export class ConstrainedMovesSequence {
   public _length: number;
   public _allocated: number;
 
-  constructor() {
-    this.values             = new Float64Array([]);
-    this.initialSpeeds      = new Float64Array([]);
-    this.finalSpeeds        = new Float64Array([]);
-    this.speedLimits        = new Float64Array([]);
-    this.accelerationLimits = new Float64Array([]);
-    this.jerkLimits         = new Float64Array([]);
+  constructor(allocated: number = 0) {
+    this.values             = new Float64Array(allocated);
+    this.initialSpeeds      = new Float64Array(allocated);
+    this.finalSpeeds        = new Float64Array(allocated);
+    this.speedLimits        = new Float64Array(allocated);
+    this.accelerationLimits = new Float64Array(allocated);
+    this.jerkLimits         = new Float64Array(allocated);
 
     this._length = 0;
-    this._allocated = 0;
+    this._allocated = allocated;
   }
 
   get length(): number {
@@ -486,14 +484,23 @@ export class ConstrainedMovesSequence {
     return constrainedMovesSequence;
   }
 
-  transfer(targetConstrainedMovesSequence: ConstrainedMovesSequence, targetIndex: number, originIndex: number) {
-    targetConstrainedMovesSequence.values[targetIndex]              = this.values[originIndex];
-    targetConstrainedMovesSequence.initialSpeeds[targetIndex]       = this.initialSpeeds[originIndex];
-    targetConstrainedMovesSequence.finalSpeeds[targetIndex]         = this.finalSpeeds[originIndex];
-    targetConstrainedMovesSequence.speedLimits[targetIndex]         = this.speedLimits[originIndex];
-    targetConstrainedMovesSequence.accelerationLimits[targetIndex]  = this.accelerationLimits[originIndex];
-    targetConstrainedMovesSequence.jerkLimits[targetIndex]          = this.jerkLimits[originIndex];
+  move(index_0: number, index_1: number) {
+    this.values[index_0]              = this.values[index_1];
+    this.initialSpeeds[index_0]       = this.initialSpeeds[index_1];
+    this.finalSpeeds[index_0]         = this.finalSpeeds[index_1];
+    this.speedLimits[index_0]         = this.speedLimits[index_1];
+    this.accelerationLimits[index_0]  = this.accelerationLimits[index_1];
+    this.jerkLimits[index_0]          = this.jerkLimits[index_1];
   }
+
+  // transfer(targetConstrainedMovesSequence: ConstrainedMovesSequence, targetIndex: number, originIndex: number) {
+  //   targetConstrainedMovesSequence.values[targetIndex]              = this.values[originIndex];
+  //   targetConstrainedMovesSequence.initialSpeeds[targetIndex]       = this.initialSpeeds[originIndex];
+  //   targetConstrainedMovesSequence.finalSpeeds[targetIndex]         = this.finalSpeeds[originIndex];
+  //   targetConstrainedMovesSequence.speedLimits[targetIndex]         = this.speedLimits[originIndex];
+  //   targetConstrainedMovesSequence.accelerationLimits[targetIndex]  = this.accelerationLimits[originIndex];
+  //   targetConstrainedMovesSequence.jerkLimits[targetIndex]          = this.jerkLimits[originIndex];
+  // }
 
   toString(index:number, type: string = 'value'): string {
     switch(type) {
@@ -567,20 +574,53 @@ export class ConstrainedMovementsSequence {
     }
   }
 
-
   /**
-   * Copy a movement into another sequence
-   * @param targetConstrainedMovementsSequence
-   * @param targetIndex
-   * @param originIndex
+   * Remove unnecessary movements
    */
-  transfer(targetConstrainedMovementsSequence: ConstrainedMovementsSequence, targetIndex: number, originIndex: number) {
-    for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i].transfer(targetConstrainedMovementsSequence.moves[i], targetIndex, originIndex);
+  reduce() {
+    let length: number = this.length;
+    if(length === 1) {
+      if(this.isNull(0)) {
+        this.length = 0;
+      }
+    } else {
+      let readIndex: number = 1;
+      let writeIndex: number = 0;
+      for(; readIndex < length; readIndex++) {
+        if(!this.merge(writeIndex, readIndex)) {
+          writeIndex++;
+          if(writeIndex !== readIndex) {
+            this.move(writeIndex, readIndex);
+          }
+        }
+      }
+
+      this.length = writeIndex + 1;
     }
   }
 
+  move(index_0: number, index_1: number) {
+    for(let i = 0; i < this.moves.length; i++) {
+      this.moves[i].move(index_0, index_1);
+    }
+  }
+
+  // transfer(targetConstrainedMovementsSequence: ConstrainedMovementsSequence, targetIndex: number, originIndex: number) {
+  //   for(let i = 0; i < this.moves.length; i++) {
+  //     this.moves[i].transfer(targetConstrainedMovementsSequence.moves[i], targetIndex, originIndex);
+  //   }
+  // }
+
   merge(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    if(this.isNull(index_0)) {
+      this.move(index_0, index_1);
+      return true;
+    }
+
+    if(this.isNull(index_1)) {
+      return true;
+    }
+
     if(this.areCorrelated(index_0, index_1, precision)) {
       let constrainedMovesSequence: ConstrainedMovesSequence;
       for(let i = 0; i < this.moves.length; i++) {
@@ -589,9 +629,9 @@ export class ConstrainedMovementsSequence {
         constrainedMovesSequence.values[index_1] = 0;
       }
       return true;
-    } else {
-      return false;
     }
+
+    return false;
   }
 
 
@@ -610,7 +650,6 @@ export class ConstrainedMovementsSequence {
     let value_0: number  = constrainedMovesSequence.values[index_0];
     let value_1: number = constrainedMovesSequence.values[index_1];
     let factor: number = value_0 / value_1;
-
     for(let i = 1; i < this.moves.length; i++) {
       constrainedMovesSequence = this.moves[i];
       value_0 = constrainedMovesSequence.values[index_0];

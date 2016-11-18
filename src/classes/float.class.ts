@@ -6,12 +6,23 @@ export class Float {
 
   static DEFAULT_PRECISION: number = Float.EPSILON;
 
+  static isNaN    = Number.isNaN;
+  static isFinite = Number.isFinite;
+
   static isNull(number: number, precision: number = Float.DEFAULT_PRECISION) {
     return Math.abs(number) < precision;
   }
 
+  static equalsNaN(number_0: number, number_1: number) {
+    return Number.isNaN(number_0) && Number.isNaN(number_1);
+  }
+
   static equals(number_0: number, number_1: number, precision: number = Float.DEFAULT_PRECISION) {
-    return Math.abs(number_0 - number_1) < precision;
+    return (number_0 === number_1) || (Math.abs(number_0 - number_1) < precision);
+  }
+
+  static nonStrictEquals(number_0: number, number_1: number, precision: number = Float.DEFAULT_PRECISION) {
+    return Float.equals(number_0, number_1, precision) || Float.equalsNaN(number_0, number_1);
   }
 
   static lessThan(number_0: number, number_1: number, precision: number = Float.DEFAULT_PRECISION) {
