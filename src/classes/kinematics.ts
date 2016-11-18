@@ -69,6 +69,8 @@ export class ConstrainedMove {
  */
 export class ConstrainedMovement extends ConstrainedMove {
 
+  static DEFAULT_PRECISION = Float.EPSILON_32;
+
   /**
    * Build the maximization matrix which links 2 ConstrainedMove
    * @param movement_0
@@ -136,7 +138,7 @@ export class ConstrainedMovement extends ConstrainedMove {
    * @param precision
    * @returns {boolean}
    */
-  static areCorrelated(movement_0: ConstrainedMovement, movement_1: ConstrainedMovement, precision: number = Float.EPSILON_32): boolean {
+  static areCollinear(movement_0: ConstrainedMovement, movement_1: ConstrainedMovement, precision: number = ConstrainedMovement.DEFAULT_PRECISION): boolean {
     let move_0: ConstrainedMove = movement_0.moves[0], move_1: ConstrainedMove = movement_1.moves[0];
     let factor: number = move_0.value / move_1.value;
 
@@ -155,14 +157,14 @@ export class ConstrainedMovement extends ConstrainedMove {
   }
 
   /**
-   * Check if 2 ConstrainedMove are correlated and have the same constraints
+   * Check if 2 ConstrainedMove are collinear and have the same constraints
    * @param movement_0
    * @param movement_1
    * @param precision
    * @returns {boolean}
    */
-  static areStronglyCorrelated(movement_0: ConstrainedMovement, movement_1: ConstrainedMovement, precision: number = Float.EPSILON_32): boolean {
-    if(!ConstrainedMovement.areCorrelated(movement_0, movement_1, precision)) {
+  static areCorrelated(movement_0: ConstrainedMovement, movement_1: ConstrainedMovement, precision: number = ConstrainedMovement.DEFAULT_PRECISION): boolean {
+    if(!ConstrainedMovement.areCollinear(movement_0, movement_1, precision)) {
       return false;
     }
 
@@ -217,6 +219,8 @@ export class ConstrainedMovement extends ConstrainedMove {
     this.accelerationLimit  = this.getNormalizedAccelerationLimit();
   }
 
+
+
   getNormalizedSpeedLimit(): number {
     let move: ConstrainedMove = this.moves[0];
     let speedLimit: number = move.speedLimit / move.distance;
@@ -237,12 +241,13 @@ export class ConstrainedMovement extends ConstrainedMove {
     return accelerationLimit;
   }
 
+
   /**
    * Return true if the movement is null (its distance equals 0)
    * @param precision
    * @returns {boolean}
    */
-  isNull(precision: number = Float.EPSILON_32): boolean {
+  isNull(precision: number = ConstrainedMovement.DEFAULT_PRECISION): boolean {
     for(let i = 0; i < this.moves.length; i++) {
       if(!Float.isNull(this.moves[i].distance, precision)) {
         return false;
@@ -253,7 +258,7 @@ export class ConstrainedMovement extends ConstrainedMove {
 
   optimizeTransitionSpeeds(nextMovement: ConstrainedMovement) {
     let finalSpeed = this.getFinalMaximumSpeed();
-    
+
     if(this.finalSpeed === null) {
       this.finalSpeed = finalSpeed;
     } else {
@@ -285,8 +290,7 @@ export class ConstrainedMovement extends ConstrainedMove {
    * t0, t2, t1
    * d0, d2, d1
    */
-  decomposeToStepperMovements(movements: StepperMovement[]) {
-    let precision: number = 1e-12;
+  decomposeToStepperMovements(movements: StepperMovement[], precision: number = 1e-12) {
 
     // compute time to reach the highest speed (not limited to speedLimit),
     // according to the accelerationLimit
@@ -414,6 +418,253 @@ export class ConstrainedMovement extends ConstrainedMove {
     }
   }
 
+}
+
+
+
+
+export class ConstrainedMovesSequence {
+
+  public values: Float64Array;
+  public initialSpeeds: Float64Array;
+  public finalSpeeds: Float64Array;
+
+  public speedLimits: Float64Array;
+  public accelerationLimits: Float64Array;
+  public jerkLimits: Float64Array;
+
+
+  public _length: number;
+  public _allocated: number;
+
+  constructor() {
+    this.values             = new Float64Array([]);
+    this.initialSpeeds      = new Float64Array([]);
+    this.finalSpeeds        = new Float64Array([]);
+    this.speedLimits        = new Float64Array([]);
+    this.accelerationLimits = new Float64Array([]);
+    this.jerkLimits         = new Float64Array([]);
+
+    this._length = 0;
+    this._allocated = 0;
+  }
+
+  get length(): number {
+    return this._length;
+  }
+
+  set length(length: number) {
+    this.allocated = length;
+    this._length = length;
+  }
+
+  get allocated(): number {
+    return this._allocated;
+  }
+
+  set allocated(allocated: number) {
+    if(this._allocated < allocated) {
+      this._allocated = allocated;
+      this.transferBuffers();
+    }
+  }
+
+
+  clone() {
+    let constrainedMovesSequence = new ConstrainedMovesSequence();
+
+    constrainedMovesSequence.values             = new Float64Array(this.values);
+    constrainedMovesSequence.initialSpeeds      = new Float64Array(this.initialSpeeds);
+    constrainedMovesSequence.finalSpeeds        = new Float64Array(this.finalSpeeds);
+    constrainedMovesSequence.speedLimits        = new Float64Array(this.speedLimits);
+    constrainedMovesSequence.accelerationLimits = new Float64Array(this.accelerationLimits);
+    constrainedMovesSequence.jerkLimits         = new Float64Array(this.jerkLimits);
+
+    constrainedMovesSequence._length = this._length;
+    constrainedMovesSequence._allocated = this.values.length;
+
+    return constrainedMovesSequence;
+  }
+
+  transfer(targetConstrainedMovesSequence: ConstrainedMovesSequence, targetIndex: number, originIndex: number) {
+    targetConstrainedMovesSequence.values[targetIndex]              = this.values[originIndex];
+    targetConstrainedMovesSequence.initialSpeeds[targetIndex]       = this.initialSpeeds[originIndex];
+    targetConstrainedMovesSequence.finalSpeeds[targetIndex]         = this.finalSpeeds[originIndex];
+    targetConstrainedMovesSequence.speedLimits[targetIndex]         = this.speedLimits[originIndex];
+    targetConstrainedMovesSequence.accelerationLimits[targetIndex]  = this.accelerationLimits[originIndex];
+    targetConstrainedMovesSequence.jerkLimits[targetIndex]          = this.jerkLimits[originIndex];
+  }
+
+  toString(index:number, type: string = 'value'): string {
+    switch(type) {
+      case 'speed':
+        return this.initialSpeeds[index] + ' ' + this.finalSpeeds[index];
+      case 'value':
+      default:
+        return this.values[index].toString();
+    }
+  }
+
+  private transferBuffers() {
+    let buffer: Float64Array;
+
+    buffer = new Float64Array(this._allocated);
+    buffer.set(this.values);
+    this.values = buffer;
+
+    buffer = new Float64Array(this._allocated);
+    buffer.set(this.initialSpeeds);
+    this.initialSpeeds = buffer;
+
+    buffer = new Float64Array(this._allocated);
+    buffer.set(this.finalSpeeds);
+    this.finalSpeeds = buffer;
+
+    buffer = new Float64Array(this._allocated);
+    buffer.set(this.speedLimits);
+    this.speedLimits = buffer;
+
+    buffer = new Float64Array(this._allocated);
+    buffer.set(this.accelerationLimits);
+    this.accelerationLimits = buffer;
+
+    buffer = new Float64Array(this._allocated);
+    buffer.set(this.jerkLimits);
+    this.jerkLimits = buffer;
+  }
+
+}
+
+
+export class ConstrainedMovementsSequence {
+  static DEFAULT_PRECISION = Float.EPSILON_32;
+
+  moves: ConstrainedMovesSequence[] = [];
+
+  constructor(numberOfParallelMoves: number) {
+    for(let i = 0; i < numberOfParallelMoves; i++) {
+      this.moves[i] = new ConstrainedMovesSequence();
+    }
+  }
+
+  get length(): number {
+    return this.moves[0].length;
+  }
+
+  set length(length: number) {
+    for(let i = 0; i < this.moves.length; i++) {
+      this.moves[i].length = length;
+    }
+  }
+
+  get allocated(): number {
+    return this.moves[0].allocated;
+  }
+
+  set allocated(allocated: number) {
+    for(let i = 0; i < this.moves.length; i++) {
+      this.moves[i].allocated = allocated;
+    }
+  }
+
+
+  /**
+   * Copy a movement into another sequence
+   * @param targetConstrainedMovementsSequence
+   * @param targetIndex
+   * @param originIndex
+   */
+  transfer(targetConstrainedMovementsSequence: ConstrainedMovementsSequence, targetIndex: number, originIndex: number) {
+    for(let i = 0; i < this.moves.length; i++) {
+      this.moves[i].transfer(targetConstrainedMovementsSequence.moves[i], targetIndex, originIndex);
+    }
+  }
+
+  merge(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    if(this.areCorrelated(index_0, index_1, precision)) {
+      let constrainedMovesSequence: ConstrainedMovesSequence;
+      for(let i = 0; i < this.moves.length; i++) {
+        constrainedMovesSequence = this.moves[i];
+        constrainedMovesSequence.values[index_0] += constrainedMovesSequence.values[index_1];
+        constrainedMovesSequence.values[index_1] = 0;
+      }
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+
+
+  isNull(index: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    for(let i = 0; i < this.moves.length; i++) {
+      if(!Float.isNull(this.moves[i].values[index], precision)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  areCollinear(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    let constrainedMovesSequence: ConstrainedMovesSequence = this.moves[0];
+    let value_0: number  = constrainedMovesSequence.values[index_0];
+    let value_1: number = constrainedMovesSequence.values[index_1];
+    let factor: number = value_0 / value_1;
+
+    for(let i = 1; i < this.moves.length; i++) {
+      constrainedMovesSequence = this.moves[i];
+      value_0 = constrainedMovesSequence.values[index_0];
+      value_1 = constrainedMovesSequence.values[index_1];
+      if(
+        (Math.sign(value_0) !== Math.sign(value_1)) ||
+        !Float.equals(factor, value_0 / value_1, precision)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  areCorrelated(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    if(!this.areCollinear(index_0, index_1, precision)) {
+      return false;
+    }
+
+    let constrainedMovesSequence: ConstrainedMovesSequence;
+    for(let i = 0; i < this.moves.length; i++) {
+      constrainedMovesSequence = this.moves[i];
+      if(
+        !Float.equals(constrainedMovesSequence.speedLimits[index_0], constrainedMovesSequence.speedLimits[index_1], precision) ||
+        !Float.equals(constrainedMovesSequence.accelerationLimits[index_0], constrainedMovesSequence.accelerationLimits[index_1], precision) ||
+        !Float.equals(constrainedMovesSequence.jerkLimits[index_0], constrainedMovesSequence.jerkLimits[index_1], precision)
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+
+  toString(index: number = -1, type: string = 'values'): string {
+    if(index === -1) {
+      let str: string = '';
+      for(let i = 0, length = this.length; i < length; i++) {
+        str += this.toString(i, type) + '\n';
+      }
+      return str;
+    } else {
+      switch(type) {
+        case 'values':
+          return this.moves.map((move) => { return move.toString(index, 'value'); }).join(', ');
+        // case 'speeds':
+        //   return this.moves.map((move) => { return (move.value * this.initialSpeed) + ' | ' + (move.value * this.finalSpeed); }).join(', ');
+        default:
+          return '';
+        // return super.toString(type);
+      }
+    }
+  }
 }
 
 

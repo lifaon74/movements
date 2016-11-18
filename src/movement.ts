@@ -1,6 +1,8 @@
 import { GCODEParser, GCODECommand } from './gcodeParser';
 import { Stepper, StepperMovement } from './classes/stepper';
-import { ConstrainedMovement, ConstrainedMove } from './classes/kinematics';
+import { ConstrainedMovement, ConstrainedMove, ConstrainedMovementsSequence, ConstrainedMovesSequence } from './classes/kinematics';
+import { Float } from './classes/float.class';
+
 
 let NanoTimer = require('nanotimer');
 
@@ -112,13 +114,73 @@ class Main {
   }
 
 
-  optimizeMovementsSequence(movements: ConstrainedMovement[]) {
+  optimizeMovementsSequence(movementsSequence: ConstrainedMovementsSequence) {
+
+  }
+
+
+  reduceMovementsSequence(movementsSequence: ConstrainedMovementsSequence) {
+    let precision = Float.EPSILON_32;
+    // let reduced: ConstrainedMovementsSequence = new ConstrainedMovementsSequence(movementsSequence.moves.length);
+    // reduced.allocated = movementsSequence.length;
+
+    let reducedLength: number = 0;
+    let readIndex: number = 1;
+    let writeIndex: number = 0;
+    for(let length = movementsSequence.length; readIndex < length; readIndex++) {
+      if(movementsSequence.isNull(readIndex)) {
+        continue;
+      }
+
+      // movementsSequence.transfer(movementsSequence, writeIndex++, readIndex);
+
+
+      if(movementsSequence.merge(writeIndex, readIndex)) {
+        // writeIndex++;
+      }
+
+      // let movesSequence: ConstrainedMovesSequence;
+      //
+      // for(let j = 0; j < movementsSequence.moves.length; j++) {
+      //   movesSequence = movementsSequence.moves[j];
+      //   if(!Float.isNull(movesSequence.values[i], precision)) {
+      //     // if(reducedLength !== i) {
+      //     //   movementsSequence.transfer(movementsSequence, reducedLength, i);
+      //     // }
+      //     // reducedLength++;
+      //     break;
+      //   }
+      // }
+      //
+
+    }
+
+    console.log(writeIndex);
+    movementsSequence.length = writeIndex + 1;
+
+    // let currentMovement: ConstrainedMovement, nextMovement: ConstrainedMovement;
+    // for(let i = 0; i < movements.length - 1; i++) {
+    //   currentMovement = movements[i];
+    //   nextMovement    = movements[i + 1];
+    //
+    //   if(ConstrainedMovement.areCorrelated(currentMovement, nextMovement)) {
+    //     movements.splice(i, 2, ConstrainedMovement.merge(currentMovement, nextMovement));
+    //     i--;
+    //   }
+    // }
+
+    return movementsSequence;
+  }
+
+
+
+  optimizeMovementsSequence_old(movements: ConstrainedMovement[]) {
     // movements.forEach((move: ConstrainedMovement) => {
     //   console.log('---');
     //   console.log(move.speedLimit, move.accelerationLimit);
     // });
 
-    this.reduceMovementsSequence(movements);
+    this.reduceMovementsSequence_old(movements);
 
     let t1 = process.hrtime();
     this.computeTransitionSpeedsOfMovementsSequence(movements);
@@ -136,7 +198,8 @@ class Main {
   }
 
 
-  reduceMovementsSequence(movements: ConstrainedMovement[]) {
+
+  reduceMovementsSequence_old(movements: ConstrainedMovement[]) {
     for(let i = 0; i < movements.length; i++) {
       if(movements[i].isNull()) {
         movements.splice(i, 1);
@@ -149,13 +212,12 @@ class Main {
       currentMovement = movements[i];
       nextMovement    = movements[i + 1];
 
-      if(ConstrainedMovement.areStronglyCorrelated(currentMovement, nextMovement)) {
+      if(ConstrainedMovement.areCorrelated(currentMovement, nextMovement)) {
         movements.splice(i, 2, ConstrainedMovement.merge(currentMovement, nextMovement));
         i--;
       }
     }
   }
-
 
 
   /**
@@ -216,8 +278,6 @@ class Main {
 }
 
 
-
-
 let simpleMovement = (x: number, y: number) => {
   let move_0 = new ConstrainedMove();
   move_0.speedLimit         = CONFIG.steppers[0].speedLimit;
@@ -240,37 +300,60 @@ let simpleMovement = (x: number, y: number) => {
 };
 
 
-let main = new Main(CONFIG);
-let movements: any[] = [];
+let buildSimpleMovementsSequence = (): ConstrainedMovementsSequence  => {
+  let movementsSequence = new ConstrainedMovementsSequence(2);
+  movementsSequence.length = 10;
 
-for(let i = 0; i < 3; i++) {
-  // let factor = ((i % 2) === 0) ? 1 : -1;
-  let factor = 1;
-  // let factor = Math.random();
-  movements.push(simpleMovement(stepsPerTurn * factor, stepsPerTurn * factor));
-}
+  for(let i = 0, length = movementsSequence.length; i < length ; i++) {
+    // let factor = ((i % 2) === 0) ? 1 : -1;
+    // let factor = 1;
+    let factor = (i >= 9) ? 0 : 1;
+    // let factor = Math.random();
+    let movesSequence: ConstrainedMovesSequence;
+    for(let j = 0; j < movementsSequence.moves.length; j++) {
+      movesSequence = movementsSequence.moves[j];
+      movesSequence.values[i] = stepsPerTurn * factor;
+      movesSequence.speedLimits[i] = CONFIG.steppers[j].speedLimit;
+      movesSequence.accelerationLimits[i] = CONFIG.steppers[j].accelerationLimit;
+      movesSequence.jerkLimits[i] = CONFIG.steppers[j].jerkLimit;
+    }
+  }
+
+  return movementsSequence;
+};
+
+
+let main = new Main(CONFIG);
+
+let movements = buildSimpleMovementsSequence();
+console.log(movements.toString());
+
+let reduced = main.reduceMovementsSequence(movements);
+
+console.log(reduced.toString());
 
 /**
  * /--\
  * |  |
  * \--/
  */
-movements = [
-  simpleMovement(stepsPerTurn, 0),
-  simpleMovement(stepsPerTurn, stepsPerTurn),
-  simpleMovement(0, stepsPerTurn),
-  simpleMovement(-stepsPerTurn, stepsPerTurn),
-  simpleMovement(-stepsPerTurn, 0),
-  simpleMovement(-stepsPerTurn, -stepsPerTurn),
-  simpleMovement(0, -stepsPerTurn),
-  simpleMovement(stepsPerTurn, -stepsPerTurn)
-];
+// movements = [
+//   simpleMovement(stepsPerTurn, 0),
+//   simpleMovement(stepsPerTurn, stepsPerTurn),
+//   simpleMovement(0, stepsPerTurn),
+//   simpleMovement(-stepsPerTurn, stepsPerTurn),
+//   simpleMovement(-stepsPerTurn, 0),
+//   simpleMovement(-stepsPerTurn, -stepsPerTurn),
+//   simpleMovement(0, -stepsPerTurn),
+//   simpleMovement(stepsPerTurn, -stepsPerTurn)
+// ];
 
-let stepperMovements = main.optimizeMovementsSequence(movements);
 
-stepperMovements.forEach((movement: StepperMovement) => {
-  console.log(movement.toString());
-});
+// let stepperMovements = main.optimizeMovementsSequence(movements);
+//
+// stepperMovements.forEach((movement: StepperMovement) => {
+//   console.log(movement.toString());
+// });
 
 
 
@@ -281,19 +364,27 @@ stepperMovements.forEach((movement: StepperMovement) => {
 // console.log(t2[0] + t2[1] / 1e9);
 // main.parseMovement(movements);
 
-let file = 'thin_tower';
+// let file = 'thin_tower';
 // let file = 'fruit_200mm';
-
-main.parseFile('../assets/' + file + '.gcode').then((movements: ConstrainedMovement[]) => {
-
-  console.log('nb', movements.length);
-  let stepperMovements = main.optimizeMovementsSequence(movements);
-  console.log('nb final', stepperMovements.length);
-
-  stepperMovements.splice(0, 10).forEach((movement: StepperMovement) => {
-    console.log(movement.toString());
-  });
-});
+//
+// let t1 = process.hrtime();
+//
+// main.parseFile('../assets/' + file + '.gcode').then((movements: ConstrainedMovement[]) => { ~20s
+//
+//   let t2 = process.hrtime(t1);
+//   console.log('opened in', t2[0] + t2[1] / 1e9);
+//
+//   console.log('nb', movements.length);
+//   let stepperMovements = main.optimizeMovementsSequence(movements);
+//   console.log('nb final', stepperMovements.length);
+//
+//   t2 = process.hrtime(t2);
+//   console.log('generated in', t2[0] + t2[1] / 1e9);
+//
+//   stepperMovements.splice(0, 10).forEach((movement: StepperMovement) => {
+//     console.log(movement.toString());
+//   });
+// });
 
 
 
