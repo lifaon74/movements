@@ -122,25 +122,6 @@ class MovementOptimizer {
   }
 
 
-  static computeTransitionSpeedsOfMovementsSequence(movementsSequence: ConstrainedMovementsSequence) {
-    // movements[0].initialSpeed = 0;
-    // for(let i = 0, length = movements.length - 1; i < length; i++) {
-    //   movements[i].optimizeTransitionSpeeds(movements[i + 1]);
-    // }
-    //
-    // movements.forEach((movement) => movement.swapTransitionSpeeds());
-    //
-    // movements[movements.length - 1].initialSpeed = 0;
-    // for(let i = movements.length - 1; i > 1; i--) {
-    //   movements[i].optimizeTransitionSpeeds(movements[i - 1]);
-    // }
-    //
-    // movements.forEach((movement) => movement.swapTransitionSpeeds());
-  }
-
-
-
-  
   constructor(private config: any) {
   }
 
@@ -223,13 +204,13 @@ class MovementOptimizer {
   }
 
 
-  optimizeMovementsSequence_old(movements: ConstrainedMovement[]) {
+  optimizeMovementsSequence(movements: ConstrainedMovement[]) {
     // movements.forEach((move: ConstrainedMovement) => {
     //   console.log('---');
     //   console.log(move.speedLimit, move.accelerationLimit);
     // });
 
-    this.reduceMovementsSequence_old(movements);
+    this.reduceMovementsSequence(movements);
 
     let t1 = process.hrtime();
     this.computeTransitionSpeedsOfMovementsSequence(movements);
@@ -246,9 +227,7 @@ class MovementOptimizer {
 
   }
 
-
-
-  reduceMovementsSequence_old(movements: ConstrainedMovement[]) {
+  reduceMovementsSequence(movements: ConstrainedMovement[]) {
     for(let i = 0; i < movements.length; i++) {
       if(movements[i].isNull()) {
         movements.splice(i, 1);
@@ -267,7 +246,6 @@ class MovementOptimizer {
       }
     }
   }
-
 
   /**
    * Compute best initial and finals speeds of ConstrainedMovement
@@ -368,22 +346,22 @@ let buildSimpleMovementsSequence = (): ConstrainedMovementsSequence  => {
 
 let getSomeData = ():Promise<ConstrainedMovementsSequence> => {
 
-  // return new Promise((resolve: any, reject: any) => {
-  //   resolve(buildSimpleMovementsSequence());
-  // });
-
   return new Promise((resolve: any, reject: any) => {
-    let movements = new ConstrainedMovementsSequence(2)
-    simpleMovement(movements, [stepsPerTurn, 0]);
-    simpleMovement(movements, [stepsPerTurn, stepsPerTurn]);
-    simpleMovement(movements, [0, stepsPerTurn]);
-    simpleMovement(movements, [-stepsPerTurn, stepsPerTurn]);
-    simpleMovement(movements, [-stepsPerTurn, 0]);
-    simpleMovement(movements, [-stepsPerTurn, -stepsPerTurn]);
-    simpleMovement(movements, [0, -stepsPerTurn]);
-    simpleMovement(movements, [stepsPerTurn, -stepsPerTurn]);
-    resolve(movements);
+    resolve(buildSimpleMovementsSequence());
   });
+
+  // return new Promise((resolve: any, reject: any) => {
+  //   let movements = new ConstrainedMovementsSequence(2)
+  //   simpleMovement(movements, [stepsPerTurn, 0]);
+  //   simpleMovement(movements, [stepsPerTurn, stepsPerTurn]);
+  //   simpleMovement(movements, [0, stepsPerTurn]);
+  //   simpleMovement(movements, [-stepsPerTurn, stepsPerTurn]);
+  //   simpleMovement(movements, [-stepsPerTurn, 0]);
+  //   simpleMovement(movements, [-stepsPerTurn, -stepsPerTurn]);
+  //   simpleMovement(movements, [0, -stepsPerTurn]);
+  //   simpleMovement(movements, [stepsPerTurn, -stepsPerTurn]);
+  //   resolve(movements);
+  // });
 
 
   // return MovementOptimizer.parseFile('../assets/' + 'thin_tower' + '.gcode', CONFIG);
@@ -399,7 +377,7 @@ getSomeData().then((movementsSequence: ConstrainedMovementsSequence) => {
   // console.log(movementsSequence.toString());
 
   t2 = process.hrtime();
-  movementsSequence.reduce();
+  // movementsSequence.reduce();
   t2 = process.hrtime(t2);
   console.log('reduced in', t2[0] + t2[1] / 1e9);
 

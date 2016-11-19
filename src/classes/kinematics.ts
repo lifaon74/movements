@@ -468,6 +468,11 @@ export class ConstrainedMovesSequence {
   }
 
 
+  compress() {
+    this._allocated = this._length;
+    this.transferBuffers();
+  }
+
   clone() {
     let movesSequence = new ConstrainedMovesSequence();
 
@@ -622,6 +627,8 @@ export class ConstrainedMovementsSequence {
     this._optimizeTransitionSpeedsPass2(normalizedMovesSequence);
 
     console.log(normalizedMovesSequence.toString(-1, 'speed'));
+
+    this._decompose(normalizedMovesSequence);
   }
 
     private _getNormalizedMovesSequence(): ConstrainedMovesSequence {
@@ -719,7 +726,6 @@ export class ConstrainedMovementsSequence {
       }
     }
 
-    // Build the maximization matrix which links 2 ConstrainedMove
     private _getMaximizationMatrix(index_0: number, index_1: number, finalSpeedLimit: number, initialSpeedLimit: number): Matrix {
       // 2 per axes
       // + 2 for max values
@@ -776,7 +782,182 @@ export class ConstrainedMovementsSequence {
       return matrix;
     }
 
+    private _decompose(normalizedMovesSequence: ConstrainedMovesSequence, precision: number = 1e-12): ConstrainedMovesSequence {
+      let decomposedNormalizedMovesSequence = new ConstrainedMovesSequence();
+      decomposedNormalizedMovesSequence.allocated = normalizedMovesSequence.length * 3;
 
+      let initialSpeed: number, finalSpeed: number;
+      let speedLimit: number, accelerationLimit: number;
+
+      let ta: number, tb: number, t0: number, t1: number, t2: number;
+      let v0_max: number;
+      let d0: number, d1: number, d2: number;
+
+      for(let i = 0, length = normalizedMovesSequence.length; i < length; i++) {
+
+        initialSpeed = normalizedMovesSequence.initialSpeeds[i];
+        finalSpeed = normalizedMovesSequence.finalSpeeds[i];
+        speedLimit = normalizedMovesSequence.speedLimits[i];
+        accelerationLimit = normalizedMovesSequence.accelerationLimits[i];
+
+        // ta, tb => time to reach junction peak of full acceleration and deceleration
+        // ta for acceleration, tb for deceleration
+        ta =  (Math.sqrt(
+            (initialSpeed * initialSpeed + finalSpeed * finalSpeed) / 2 +
+            accelerationLimit /* * this.distance */
+          ) - initialSpeed) / accelerationLimit;
+        tb = ta + (initialSpeed - finalSpeed) / accelerationLimit;
+
+        // t0, t1, t3 => times of the 3 decomposed moves
+        t0 = Math.min(ta, (speedLimit - initialSpeed) / accelerationLimit);
+        t1 = Math.min(tb, (speedLimit - finalSpeed) / accelerationLimit);
+
+        // max achieved speed
+        v0_max = accelerationLimit * t0 + initialSpeed;
+        // v1_max = this.accelerationLimit * t1 + this.finalSpeed;
+
+        // d0, d1, d2 => distances of the 3 decomposed moves
+        d0 = 0.5 * accelerationLimit * t0 * t0 + initialSpeed * t0;
+        d1 = 0.5 * accelerationLimit * t1 * t1 + finalSpeed * t1;
+        d2 = 1 - d0 - d1;
+
+        t2 = d2 / v0_max;
+
+
+        console.log('t=>', t0, t1, t2);
+        // console.log('v=>', v0_max, v1_max);
+
+        console.log('d=>', d0, d1, d2);
+        console.log('--');
+
+        // let stepperAccelerationMovement: StepperMovement = null;
+        // let stepperLinearMovement: StepperMovement = null;
+        // let stepperDecelerationMovement: StepperMovement = null;
+        // let stepperMove: StepperMove;
+        // let move: ConstrainedMove;
+        //
+        // // acceleration
+        // if(!Float.isNull(t0, precision)) {
+        //   stepperAccelerationMovement = new StepperMovement();
+        //
+        //   for(let move of this.moves) {
+        //     stepperMove = new StepperMove();
+        //
+        //     stepperMove.steps         = Math.round(move.distance * d0);
+        //     stepperMove.direction     = move.direction;
+        //     stepperMove.acceleration  = this.accelerationLimit * move.distance;
+        //     stepperMove.initialSpeed  = this.initialSpeed * move.distance;
+        //
+        //     stepperAccelerationMovement.moves.push(stepperMove);
+        //   }
+        // }
+      }
+
+      return decomposedNormalizedMovesSequence;
+    }
+
+  //   decomposeToStepperMovements(movements: StepperMovement[], precision: number = 1e-12) {
+  //
+  //   // compute time to reach the highest speed (not limited to speedLimit),
+  //   // according to the accelerationLimit
+  //   let ta =  (Math.sqrt(
+  //       (this.initialSpeed * this.initialSpeed + this.finalSpeed * this.finalSpeed) / 2 +
+  //       this.accelerationLimit /* * this.distance */
+  //     ) - this.initialSpeed) / this.accelerationLimit;
+  //   let tb = ta + (this.initialSpeed - this.finalSpeed) / this.accelerationLimit;
+  //
+  //   let t0 = Math.min(ta, (this.speedLimit - this.initialSpeed) / this.accelerationLimit);
+  //   let t1 = Math.min(tb, (this.speedLimit - this.finalSpeed) / this.accelerationLimit);
+  //
+  //   let v0_max = this.accelerationLimit * t0 + this.initialSpeed;
+  //   // let v1_max = this.accelerationLimit * t1 + this.finalSpeed;
+  //
+  //   let d0 = 0.5 * this.accelerationLimit * t0 * t0 + this.initialSpeed * t0;
+  //   let d1 = 0.5 * this.accelerationLimit * t1 * t1 + this.finalSpeed * t1;
+  //   let d2 = 1 - d0 - d1;
+  //
+  //   let t2 = d2 / v0_max;
+  //
+  //
+  //   // console.log('t=>', t0, t1, t2);
+  //   // console.log('v=>', v0_max, v1_max);
+  //   //
+  //   // console.log('d=>', d0, d1, d2);
+  //   // console.log('--');
+  //
+  //
+  //   let stepperAccelerationMovement: StepperMovement = null;
+  //   let stepperLinearMovement: StepperMovement = null;
+  //   let stepperDecelerationMovement: StepperMovement = null;
+  //   let stepperMove: StepperMove;
+  //   let move: ConstrainedMove;
+  //
+  //   // acceleration
+  //   if(!Float.isNull(t0, precision)) {
+  //     stepperAccelerationMovement = new StepperMovement();
+  //
+  //     for(let move of this.moves) {
+  //       stepperMove = new StepperMove();
+  //
+  //       stepperMove.steps         = Math.round(move.distance * d0);
+  //       stepperMove.direction     = move.direction;
+  //       stepperMove.acceleration  = this.accelerationLimit * move.distance;
+  //       stepperMove.initialSpeed  = this.initialSpeed * move.distance;
+  //
+  //       stepperAccelerationMovement.moves.push(stepperMove);
+  //     }
+  //   }
+  //
+  //   // deceleration
+  //   if(!Float.isNull(t1, precision)) {
+  //     stepperDecelerationMovement = new StepperMovement();
+  //
+  //     for(let move of this.moves) {
+  //       stepperMove = new StepperMove();
+  //
+  //       stepperMove.steps         = Math.round(move.distance * d1);
+  //       stepperMove.direction     = move.direction;
+  //       stepperMove.acceleration  = -this.accelerationLimit * move.distance;
+  //       stepperMove.initialSpeed  = v0_max * move.distance;
+  //
+  //       stepperDecelerationMovement.moves.push(stepperMove);
+  //     }
+  //   }
+  //
+  //   // linear
+  //   if(!Float.isNull(t2, precision)) {
+  //     stepperLinearMovement = new StepperMovement();
+  //
+  //     for(let i = 0; i < this.moves.length; i++) {
+  //       move = this.moves[i];
+  //
+  //       stepperMove = new StepperMove();
+  //
+  //       stepperMove.steps = Math.round(move.distance);
+  //
+  //       if(stepperAccelerationMovement) {
+  //         stepperMove.steps -= stepperAccelerationMovement.moves[i].steps;
+  //       }
+  //
+  //       if(stepperDecelerationMovement) {
+  //         stepperMove.steps -= stepperDecelerationMovement.moves[i].steps;
+  //       }
+  //
+  //       // stepperMove.steps         = Math.round(move.distance * d2);
+  //       stepperMove.direction     = move.direction;
+  //       stepperMove.acceleration  = 0;
+  //       stepperMove.initialSpeed  = v0_max * move.distance;
+  //
+  //       stepperLinearMovement.moves.push(stepperMove);
+  //     }
+  //   }
+  //
+  //
+  //   if(stepperAccelerationMovement) movements.push(stepperAccelerationMovement);
+  //   if(stepperLinearMovement) movements.push(stepperLinearMovement);
+  //   if(stepperDecelerationMovement) movements.push(stepperDecelerationMovement);
+  //
+  // }
 
   // Move the movement at index_1 into the movement at index_0
   move(index_0: number, index_1: number) {
