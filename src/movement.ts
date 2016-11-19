@@ -9,7 +9,7 @@ let NanoTimer = require('nanotimer');
 
 const stepsPerTurn = 6400;//6400
 
-const ACCELERATION_LIMIT = stepsPerTurn / 1;
+const ACCELERATION_LIMIT = stepsPerTurn / 4;
 const SPEED_LIMIT = stepsPerTurn / 1; // 1 turn / s
 const JERK_LIMIT = stepsPerTurn / 4;
 
@@ -396,14 +396,20 @@ getSomeData().then((movementsSequence: ConstrainedMovementsSequence) => {
   let t2 = process.hrtime(t1);
   console.log('opened in', t2[0] + t2[1] / 1e9);
 
-  console.log(movementsSequence.toString());
+  // console.log(movementsSequence.toString());
 
   t2 = process.hrtime();
   movementsSequence.reduce();
   t2 = process.hrtime(t2);
   console.log('reduced in', t2[0] + t2[1] / 1e9);
 
+  t2 = process.hrtime();
+  movementsSequence.optimizeTransitionSpeeds();
+  t2 = process.hrtime(t2);
+  console.log('optimized in', t2[0] + t2[1] / 1e9);
+
   console.log(movementsSequence.toString());
+  // console.log(movementsSequence.toString(-1, 'speeds'));
 });
 
 

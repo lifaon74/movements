@@ -469,19 +469,19 @@ export class ConstrainedMovesSequence {
 
 
   clone() {
-    let constrainedMovesSequence = new ConstrainedMovesSequence();
+    let movesSequence = new ConstrainedMovesSequence();
 
-    constrainedMovesSequence.values             = new Float64Array(this.values);
-    constrainedMovesSequence.initialSpeeds      = new Float64Array(this.initialSpeeds);
-    constrainedMovesSequence.finalSpeeds        = new Float64Array(this.finalSpeeds);
-    constrainedMovesSequence.speedLimits        = new Float64Array(this.speedLimits);
-    constrainedMovesSequence.accelerationLimits = new Float64Array(this.accelerationLimits);
-    constrainedMovesSequence.jerkLimits         = new Float64Array(this.jerkLimits);
+    movesSequence.values             = new Float64Array(this.values);
+    movesSequence.initialSpeeds      = new Float64Array(this.initialSpeeds);
+    movesSequence.finalSpeeds        = new Float64Array(this.finalSpeeds);
+    movesSequence.speedLimits        = new Float64Array(this.speedLimits);
+    movesSequence.accelerationLimits = new Float64Array(this.accelerationLimits);
+    movesSequence.jerkLimits         = new Float64Array(this.jerkLimits);
 
-    constrainedMovesSequence._length = this._length;
-    constrainedMovesSequence._allocated = this.values.length;
+    movesSequence._length = this._length;
+    movesSequence._allocated = this.values.length;
 
-    return constrainedMovesSequence;
+    return movesSequence;
   }
 
   move(index_0: number, index_1: number) {
@@ -502,13 +502,24 @@ export class ConstrainedMovesSequence {
   //   targetConstrainedMovesSequence.jerkLimits[targetIndex]          = this.jerkLimits[originIndex];
   // }
 
-  toString(index:number, type: string = 'value'): string {
-    switch(type) {
-      case 'speed':
-        return this.initialSpeeds[index] + ' ' + this.finalSpeeds[index];
-      case 'value':
-      default:
-        return this.values[index].toString();
+
+  toString(index: number = -1, type: string = 'value'): string {
+    if(index === -1) {
+      let str: string = '';
+      for(let i = 0, length = this.length; i < length; i++) {
+        str += this.toString(i, type) + '\n';
+      }
+      return str;
+    } else {
+      switch(type) {
+        case 'speed':
+          return '( ' + this.initialSpeeds[index] + ', ' + this.finalSpeeds[index] + ' )';
+        case 'limits':
+          return '( ' + this.speedLimits[index] + ', ' + this.accelerationLimits[index] + ', ' + this.jerkLimits[index] + ' )';
+        case 'value':
+        default:
+          return this.values[index].toString();
+      }
     }
   }
 
@@ -599,6 +610,175 @@ export class ConstrainedMovementsSequence {
     }
   }
 
+
+  optimizeTransitionSpeeds() {
+    let normalizedMovesSequence = this._getNormalizedMovesSequence();
+    // console.log(normalizedMovesSequence.toString(-1, 'limits'));
+
+    this._optimizeTransitionSpeedsPass1(normalizedMovesSequence);
+
+    //console.log(normalizedMovesSequence.toString(-1, 'speed'));
+
+    this._optimizeTransitionSpeedsPass2(normalizedMovesSequence);
+
+    console.log(normalizedMovesSequence.toString(-1, 'speed'));
+  }
+
+    private _getNormalizedMovesSequence(): ConstrainedMovesSequence {
+      let movesSequence = new ConstrainedMovesSequence();
+      movesSequence.length = this.length;
+
+      let move: ConstrainedMovesSequence;
+      let speedLimit: number, accelerationLimit: number, value: number;
+      for(let i = 0, length = this.length; i < length; i++) {
+        move = this.moves[0];
+        value = Math.abs(move.values[i]);
+        speedLimit = move.speedLimits[i] / value;
+        accelerationLimit = move.accelerationLimits[i] / value;
+        for(let j = 1; j < this.moves.length; j++) {
+          move = this.moves[j];
+          value = Math.abs(move.values[i]);
+          speedLimit = Math.min(speedLimit, move.speedLimits[i] / value);
+          accelerationLimit = Math.min(accelerationLimit, move.accelerationLimits[i] / value);
+        }
+
+        // movesSequence.values[i]              = 1;
+        // movesSequence.initialSpeeds[i]       = NaN;
+        // movesSequence.finalSpeeds[i]         = NaN;
+        movesSequence.speedLimits[i]         = speedLimit;
+        movesSequence.accelerationLimits[i]  = accelerationLimit;
+        // movesSequence.jerkLimits[i]          = 0;
+      }
+
+      return movesSequence;
+    }
+
+    private _optimizeTransitionSpeedsPass1(normalizedMovesSequence: ConstrainedMovesSequence) {
+      let initialSpeed: number;
+      let accelerationLimit: number;
+      let finalSpeedLimit: number;
+
+      let matrix: Matrix;
+      let solutions: Matrix;
+      let i: number = 0;
+      normalizedMovesSequence.initialSpeeds[i] = 0;
+      for(let length = normalizedMovesSequence.length - 1; i < length; i++) {
+        initialSpeed = normalizedMovesSequence.initialSpeeds[i];
+        accelerationLimit = normalizedMovesSequence.accelerationLimits[i];
+
+        // compute final speed limit according to accelerationLimit and speedLimit
+        finalSpeedLimit = Math.min(
+          normalizedMovesSequence.speedLimits[i],
+          (accelerationLimit === 0) ?
+            initialSpeed : Math.sqrt(initialSpeed * initialSpeed + 2 * accelerationLimit)
+        );
+
+        // build the maximization matrix
+        matrix = this._getMaximizationMatrix(
+          i, i + 1,
+          finalSpeedLimit, Math.min(finalSpeedLimit, normalizedMovesSequence.speedLimits[i + 1])
+        );
+        // get max final and initial speeds
+        solutions = Matrix.getStandardMaximizationProblemSolutions(matrix.solveStandardMaximizationProblem());
+
+        normalizedMovesSequence.finalSpeeds[i]        = solutions.values[0];
+        normalizedMovesSequence.initialSpeeds[i + 1]  = solutions.values[1];
+      }
+    }
+
+    private _optimizeTransitionSpeedsPass2(normalizedMovesSequence: ConstrainedMovesSequence) {
+      let finalSpeed: number;
+      let accelerationLimit: number;
+      let initialSpeedLimit: number;
+
+      let matrix: Matrix;
+      let solutions: Matrix;
+      let i: number = normalizedMovesSequence.length - 1;
+      normalizedMovesSequence.finalSpeeds[i] = 0;
+      for(; i > 0; i--) {
+        finalSpeed = normalizedMovesSequence.finalSpeeds[i];
+        accelerationLimit = normalizedMovesSequence.accelerationLimits[i];
+
+        // compute initial speed limit according to accelerationLimit and speedLimit
+        initialSpeedLimit = Math.min(
+          normalizedMovesSequence.speedLimits[i],
+          (accelerationLimit === 0) ?
+            finalSpeed : Math.sqrt(finalSpeed * finalSpeed + 2 * accelerationLimit)
+        );
+
+        // build the maximization matrix
+        matrix = this._getMaximizationMatrix(
+          i - 1, i,
+          Math.min(initialSpeedLimit, normalizedMovesSequence.finalSpeeds[i - 1]), initialSpeedLimit
+        );
+        // get max final and initial speeds
+        solutions = Matrix.getStandardMaximizationProblemSolutions(matrix.solveStandardMaximizationProblem());
+
+        normalizedMovesSequence.finalSpeeds[i - 1]  = solutions.values[0];
+        normalizedMovesSequence.initialSpeeds[i]    = solutions.values[1];
+      }
+    }
+
+    // Build the maximization matrix which links 2 ConstrainedMove
+    private _getMaximizationMatrix(index_0: number, index_1: number, finalSpeedLimit: number, initialSpeedLimit: number): Matrix {
+      // 2 per axes
+      // + 2 for max values
+      // + 1 for maximization
+      let rowsNumber: number = this.moves.length * 2 + 2 + 1;
+
+      // D[i][0] * Ve - D[i][1] * Vi < J[i] => 3 columns
+      let matrix = new Matrix(rowsNumber, 3 + rowsNumber - 1);
+
+      let movesSequence: ConstrainedMovesSequence;
+      let row: number = 0;
+
+      let col_1: number = matrix.m;
+      let col_last: number = (matrix.n - 1) * matrix.m;
+      let jerkLimit: number;
+      let value_0: number, value_1: number;
+
+      for(let i = 0; i < this.moves.length; i++) {
+        movesSequence = this.moves[i];
+
+        jerkLimit = Math.min(movesSequence.jerkLimits[index_0], movesSequence.jerkLimits[index_1]); //  * move_0.direction  * move_1.direction
+
+        value_0 = movesSequence.values[index_0];
+        value_1 = movesSequence.values[index_1];
+
+        matrix.values[row] = value_0;
+        matrix.values[row + col_1] = -value_1;
+        matrix.values[row + col_last] = jerkLimit;
+        row++;
+
+        matrix.values[row] = -value_0;
+        matrix.values[row + col_1] = value_1;
+        matrix.values[row + col_last] = jerkLimit;
+        row++;
+      }
+
+      matrix.values[row] = 1;
+      // matrix.values[row + col_1] = 0;
+      matrix.values[row + col_last] = finalSpeedLimit;
+      row++;
+
+      // matrix.values[row] = 0;
+      matrix.values[row + col_1] = 1;
+      matrix.values[row + col_last] = initialSpeedLimit;
+      row++;
+
+      matrix.values[row] = -1;
+      matrix.values[row + col_1] = -1;
+
+      for(let m = 0; m < matrix.m - 1; m++) {
+        matrix.values[m + (m + 2) * matrix.m] = 1;
+      }
+
+      return matrix;
+    }
+
+
+
+  // Move the movement at index_1 into the movement at index_0
   move(index_0: number, index_1: number) {
     for(let i = 0; i < this.moves.length; i++) {
       this.moves[i].move(index_0, index_1);
@@ -611,6 +791,15 @@ export class ConstrainedMovementsSequence {
   //   }
   // }
 
+  /**
+   * Try to merge two movements,
+   * can only append if both movements are collinear and have the same limits
+   *
+   * @param index_0 movement_0 where de merge will occur
+   * @param index_1 movement_1 to remove if mergeable
+   * @param precision
+   * @returns {boolean}
+   */
   merge(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
     if(this.isNull(index_0)) {
       this.move(index_0, index_1);
@@ -622,11 +811,11 @@ export class ConstrainedMovementsSequence {
     }
 
     if(this.areCorrelated(index_0, index_1, precision)) {
-      let constrainedMovesSequence: ConstrainedMovesSequence;
+      let movesSequence: ConstrainedMovesSequence;
       for(let i = 0; i < this.moves.length; i++) {
-        constrainedMovesSequence = this.moves[i];
-        constrainedMovesSequence.values[index_0] += constrainedMovesSequence.values[index_1];
-        constrainedMovesSequence.values[index_1] = 0;
+        movesSequence = this.moves[i];
+        movesSequence.values[index_0] += movesSequence.values[index_1];
+        movesSequence.values[index_1] = 0;
       }
       return true;
     }
@@ -646,14 +835,14 @@ export class ConstrainedMovementsSequence {
   }
 
   areCollinear(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
-    let constrainedMovesSequence: ConstrainedMovesSequence = this.moves[0];
-    let value_0: number  = constrainedMovesSequence.values[index_0];
-    let value_1: number = constrainedMovesSequence.values[index_1];
+    let movesSequence: ConstrainedMovesSequence = this.moves[0];
+    let value_0: number  = movesSequence.values[index_0];
+    let value_1: number = movesSequence.values[index_1];
     let factor: number = value_0 / value_1;
     for(let i = 1; i < this.moves.length; i++) {
-      constrainedMovesSequence = this.moves[i];
-      value_0 = constrainedMovesSequence.values[index_0];
-      value_1 = constrainedMovesSequence.values[index_1];
+      movesSequence = this.moves[i];
+      value_0 = movesSequence.values[index_0];
+      value_1 = movesSequence.values[index_1];
       if(
         (Math.sign(value_0) !== Math.sign(value_1)) ||
         !Float.equals(factor, value_0 / value_1, precision)
@@ -669,13 +858,13 @@ export class ConstrainedMovementsSequence {
       return false;
     }
 
-    let constrainedMovesSequence: ConstrainedMovesSequence;
+    let movesSequence: ConstrainedMovesSequence;
     for(let i = 0; i < this.moves.length; i++) {
-      constrainedMovesSequence = this.moves[i];
+      movesSequence = this.moves[i];
       if(
-        !Float.equals(constrainedMovesSequence.speedLimits[index_0], constrainedMovesSequence.speedLimits[index_1], precision) ||
-        !Float.equals(constrainedMovesSequence.accelerationLimits[index_0], constrainedMovesSequence.accelerationLimits[index_1], precision) ||
-        !Float.equals(constrainedMovesSequence.jerkLimits[index_0], constrainedMovesSequence.jerkLimits[index_1], precision)
+        !Float.equals(movesSequence.speedLimits[index_0], movesSequence.speedLimits[index_1], precision) ||
+        !Float.equals(movesSequence.accelerationLimits[index_0], movesSequence.accelerationLimits[index_1], precision) ||
+        !Float.equals(movesSequence.jerkLimits[index_0], movesSequence.jerkLimits[index_1], precision)
       ) {
         return false;
       }
@@ -704,6 +893,7 @@ export class ConstrainedMovementsSequence {
       }
     }
   }
+
 }
 
 
