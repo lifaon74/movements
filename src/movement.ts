@@ -1,7 +1,6 @@
 import { GCODEParser, GCODECommand } from './gcodeParser';
 import { Stepper } from './classes/stepper';
-import { ConstrainedMovementsSequence, ConstrainedMovesSequence } from './classes/kinematics';
-import { Float } from './classes/float.class';
+import { ConstrainedMovementsSequence, ConstrainedMovesSequence, StepperMovementsSequence } from './classes/kinematics';
 
 
 let NanoTimer = require('nanotimer');
@@ -9,9 +8,9 @@ let NanoTimer = require('nanotimer');
 
 const stepsPerTurn = 6400;//6400
 
-const ACCELERATION_LIMIT = stepsPerTurn / 4;
-const SPEED_LIMIT = stepsPerTurn / 1; // 1 turn / s
-const JERK_LIMIT = stepsPerTurn / 4;
+const ACCELERATION_LIMIT = stepsPerTurn / (4/1);
+const SPEED_LIMIT = stepsPerTurn / (1/1); // 1 turn / s | max 6.25
+const JERK_LIMIT = stepsPerTurn / 4 ;
 
 
 interface ICONFIG {
@@ -59,7 +58,7 @@ class MovementOptimizer {
 
     for(let j = 0; j < commands.length; j++) {
       command = commands[j];
-      if(j > 30) break;
+      // if(j > 30) break;
 
       switch(command.command) {
         case 'G0':
@@ -122,6 +121,10 @@ class MovementOptimizer {
   }
 
 
+  static executeMovements(stepperMovementsSequence: StepperMovementsSequence, options: any) {
+
+  }
+
   // executeMovements(movements: Movement[], callback: (() => any)) {
   //   let movementIndex: number = 0;
   //   let currentMovement: Movement = movements[movementIndex];
@@ -176,6 +179,7 @@ let buildSimpleMovementsSequence = (): ConstrainedMovementsSequence  => {
     // let factor = ((i % 2) === 0) ? 1 : -1;
     let factor = 1;
     // let factor = (i >= 7 || i < 2) ? 0 : 1;
+    // let factor = (i >= 5) ? -1 : 1;
     // let factor = Math.random();
     let movesSequence: ConstrainedMovesSequence;
     for(let j = 0; j < movementsSequence.moves.length; j++) {
@@ -193,22 +197,22 @@ let buildSimpleMovementsSequence = (): ConstrainedMovementsSequence  => {
 
 let getSomeData = ():Promise<ConstrainedMovementsSequence> => {
 
-  // return new Promise((resolve: any, reject: any) => {
-  //   resolve(buildSimpleMovementsSequence());
-  // });
-
   return new Promise((resolve: any, reject: any) => {
-    let movements = new ConstrainedMovementsSequence(2);
-    simpleMovement(movements, [stepsPerTurn, 0]);
-    simpleMovement(movements, [stepsPerTurn, stepsPerTurn]);
-    simpleMovement(movements, [0, stepsPerTurn]);
-    simpleMovement(movements, [-stepsPerTurn, stepsPerTurn]);
-    simpleMovement(movements, [-stepsPerTurn, 0]);
-    simpleMovement(movements, [-stepsPerTurn, -stepsPerTurn]);
-    simpleMovement(movements, [0, -stepsPerTurn]);
-    simpleMovement(movements, [stepsPerTurn, -stepsPerTurn]);
-    resolve(movements);
+    resolve(buildSimpleMovementsSequence());
   });
+
+  // return new Promise((resolve: any, reject: any) => {
+  //   let movements = new ConstrainedMovementsSequence(2);
+  //   simpleMovement(movements, [stepsPerTurn, 0]);
+  //   simpleMovement(movements, [stepsPerTurn, stepsPerTurn]);
+  //   simpleMovement(movements, [0, stepsPerTurn]);
+  //   simpleMovement(movements, [-stepsPerTurn, stepsPerTurn]);
+  //   simpleMovement(movements, [-stepsPerTurn, 0]);
+  //   simpleMovement(movements, [-stepsPerTurn, -stepsPerTurn]);
+  //   simpleMovement(movements, [0, -stepsPerTurn]);
+  //   simpleMovement(movements, [stepsPerTurn, -stepsPerTurn]);
+  //   resolve(movements);
+  // });
 
 
   // return MovementOptimizer.parseFile('../assets/' + 'thin_tower' + '.gcode', CONFIG);
@@ -235,8 +239,15 @@ getSomeData().then((movementsSequence: ConstrainedMovementsSequence) => {
 
   stepperMovementsSequence.compact();
 
+
+  let time = 0;
+  for(let i = 0, length = stepperMovementsSequence.times.length; i < length; i++) {
+    time += stepperMovementsSequence.times[i];
+  }
+
   console.log(stepperMovementsSequence.toString());
-  console.log(stepperMovementsSequence.length);
+  console.log(stepperMovementsSequence.length, time);
+
   // console.log(movementsSequence.toString(-1, 'speeds'));
 });
 
