@@ -1,6 +1,9 @@
 import { GCODEParser, GCODECommand } from './gcodeParser';
 import { Stepper } from './classes/stepper';
-import { ConstrainedMovementsSequence, ConstrainedMovesSequence, StepperMovementsSequence } from './classes/kinematics';
+import {
+  ConstrainedMovementsSequence, ConstrainedMovesSequence, StepperMovementsSequence,
+  StepperMovesSequence
+} from './classes/kinematics';
 import { Timer } from './classes/timer.class';
 
 
@@ -124,7 +127,7 @@ class CNCController {
 
   public startTime: number;
   public stepperMovementsSequence: StepperMovementsSequence;
-  public stepperMovementsSequenceIndex: number;
+  public index: number;
 
   public times = new Float64Array(1000);
   public canvas: HTMLCanvasElement;
@@ -152,8 +155,8 @@ class CNCController {
 
   
   start(stepperMovementsSequence: StepperMovementsSequence) {
-    this.stepperMovementsSequence       = stepperMovementsSequence;
-    this.stepperMovementsSequenceIndex  = 0;
+    this.stepperMovementsSequence = stepperMovementsSequence;
+    this.index  = 0;
 
     if(IS_BROWSER) {
       this.initCanvas();
@@ -170,8 +173,31 @@ class CNCController {
     let elapsedTime = (currentTime - this.startTime);
     this.startTime = currentTime;
 
-    this.times[this.stepperMovementsSequenceIndex] = elapsedTime * 1e6;
+    this.times[this.index] = elapsedTime * 1e6;
 
+    console.log("============", elapsedTime);
+
+    let accelerationFactor: number = elapsedTime * elapsedTime * 0.5;
+    let move: StepperMovesSequence;
+    let stepsByte: number = 0 | 0;
+    for(let i = 0; i < this.stepperMovementsSequence.moves.length; i++) {
+      move = this.stepperMovementsSequence.moves[i];
+      let value = move.values[this.index];
+      let position = move.positions[this.index];
+
+      let distance = Math.abs(value);
+      let steps = Math.round(Math.min(1,
+          this.stepperMovementsSequence.accelerations[this.index] * accelerationFactor +
+          this.stepperMovementsSequence.initialSpeeds[this.index] * elapsedTime
+      ) * distance);
+
+      let deltaSteps = (steps - position) ? 1 : 0;
+      move.positions[this.index] += deltaSteps;
+      stepsByte |= deltaSteps << i;
+      // console.log(steps, value, position, deltaSteps);
+    }
+
+    console.log(stepsByte.toString(2));
 
     // let accelerationFactor: number = elapsedTime * elapsedTime * 0.5;
     // let move: StepperMove;
@@ -186,15 +212,15 @@ class CNCController {
     // }
 
     if(IS_BROWSER) {
-      this.drawPoint(this.stepperMovementsSequenceIndex, 0);
+      this.drawPoint(this.index, 0);
     }
 
-    this.stepperMovementsSequenceIndex++;
+    this.index++;
 
-    if(this.stepperMovementsSequenceIndex < this.stepperMovementsSequence.length) {
+    if(this.index < this.stepperMovementsSequence.length) {
       process.nextTick(() => this.loop());
     } else {
-      console.log(this.times.subarray(0, 10));
+      // console.log(this.times.subarray(0, 10));
     }
   }
 
@@ -247,7 +273,7 @@ let simpleMovement = (movementsSequence: ConstrainedMovementsSequence, values: n
 
 let buildSimpleMovementsSequence = (): ConstrainedMovementsSequence  => {
   let movementsSequence = new ConstrainedMovementsSequence(2);
-  movementsSequence.length = 10;
+  movementsSequence.length = 5;
 
   for(let i = 0, length = movementsSequence.length; i < length ; i++) {
     // let factor = ((i % 2) === 0) ? 1 : -1;
@@ -316,8 +342,8 @@ let start = () => {
       time += stepperMovementsSequence.times[i];
     }
 
-    console.log(stepperMovementsSequence.toString());
-    console.log(stepperMovementsSequence.length, time);
+    // console.log(stepperMovementsSequence.toString());
+    // console.log(stepperMovementsSequence.length, time);
 
     let controller = new CNCController(CONFIG);
     controller.start(stepperMovementsSequence);

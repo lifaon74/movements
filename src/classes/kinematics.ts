@@ -432,7 +432,6 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
       let v0_max: number;
       let d0: number, d1: number, d2: number;
 
-      let constrainedMovesSequence: ConstrainedMovesSequence;
 
       for(let i = 0, length = normalizedMovesSequence.length; i < length; i++) {
 
@@ -477,7 +476,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
           stepperMovementsSequence.accelerations[stepperMovementsSequenceLength] = normalizedMovesSequence.accelerationLimits[i];
 
           for(let j = 0; j < this.moves.length; j++) {
-            stepperMovementsSequence.moves[j][stepperMovementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d0;
+            stepperMovementsSequence.moves[j].values[stepperMovementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d0;
           }
 
           stepperMovementsSequenceLength++;
@@ -490,7 +489,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
           // stepperMovementsSequence.accelerations[stepperMovementsSequenceLength] = 0;
 
           for(let j = 0; j < this.moves.length; j++) {
-            stepperMovementsSequence.moves[j][stepperMovementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d1;
+            stepperMovementsSequence.moves[j].values[stepperMovementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d1;
           }
 
           stepperMovementsSequenceLength++;
@@ -503,7 +502,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
           stepperMovementsSequence.accelerations[stepperMovementsSequenceLength] = -normalizedMovesSequence.accelerationLimits[i];
 
           for(let j = 0; j < this.moves.length; j++) {
-            stepperMovementsSequence.moves[j][stepperMovementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d2;
+            stepperMovementsSequence.moves[j].values[stepperMovementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d2;
           }
 
           stepperMovementsSequenceLength++;
@@ -633,6 +632,26 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 }
 
 
+export class StepperMovesSequence extends DynamicSequence {
+  public values: Float64Array;
+  public positions: Float64Array;
+
+
+  constructor(size?: number) {
+    super(size);
+
+    this.values     = new Float64Array(this.allocated);
+    this.positions  = new Float64Array(this.allocated);
+  }
+
+
+  protected transferBuffers() {
+    this.values     = DynamicSequence.sliceTypedArray(this.values, 0, this.allocated);
+    this.positions  = DynamicSequence.sliceTypedArray(this.positions, 0, this.allocated);
+  }
+
+}
+
 
 export class StepperMovementsSequence extends DynamicSequence {
 
@@ -640,7 +659,7 @@ export class StepperMovementsSequence extends DynamicSequence {
   public initialSpeeds: Float64Array;
   public accelerations: Float64Array;
 
-  public moves: Float64Array[] = [];
+  public moves: StepperMovesSequence[] = [];
 
   constructor(numberOfParallelMoves: number) {
     super();
@@ -650,7 +669,7 @@ export class StepperMovementsSequence extends DynamicSequence {
     this.accelerations  = new Float64Array(this.allocated);
 
     for(let i = 0; i < numberOfParallelMoves; i++) {
-      this.moves[i] = new Float64Array(this.allocated);
+      this.moves[i] = new StepperMovesSequence(this.allocated);
     }
   }
 
@@ -660,7 +679,7 @@ export class StepperMovementsSequence extends DynamicSequence {
     this.accelerations  = DynamicSequence.sliceTypedArray(this.accelerations, 0, this.allocated);
 
     for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i] = DynamicSequence.sliceTypedArray(this.moves[i], 0, this.allocated);
+      this.moves[i].require(this.allocated);
     }
   }
 
@@ -676,12 +695,12 @@ export class StepperMovementsSequence extends DynamicSequence {
       switch(type) {
         case 'values':
           return 'time: ' + this.times[index] + ' => ' +
-            this.moves.map((move: Float64Array) => {
+            this.moves.map((move: StepperMovesSequence) => {
               // return move.toString(index);
               return '{ ' +
-                  'value: ' + move[index] +
-                ', speed: ' + move[index] * this.initialSpeeds[index] +
-                ', accel: ' + move[index] * this.accelerations[index] +
+                  'value: ' + move.values[index] +
+                ', speed: ' + move.values[index] * this.initialSpeeds[index] +
+                ', accel: ' + move.values[index] * this.accelerations[index] +
                 ' }';
             }).join(', ');
         default:
@@ -746,7 +765,7 @@ export class StepperMovementsSequence2 extends DynamicSequenceCollection {
     this.times = new Float64Array(0);
 
     for(let i = 0; i < numberOfParallelMoves; i++) {
-      this.moves[i] = new StepperMovesSequence();
+      this.moves[i] = new StepperMovesSequence2();
     }
   }
 
@@ -760,7 +779,7 @@ export class StepperMovementsSequence2 extends DynamicSequenceCollection {
     } else {
       switch(type) {
         case 'values':
-          return 'time: ' + this.times[index] + ' => ' + (<StepperMovesSequence[]>this.moves).map((move: StepperMovesSequence) => {
+          return 'time: ' + this.times[index] + ' => ' + (<StepperMovesSequence2[]>this.moves).map((move: StepperMovesSequence2) => {
             return move.toString(index);
           }).join(', ');
         default:
