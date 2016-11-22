@@ -4,7 +4,9 @@
   "description": "",
   "main": "timer.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "npm run browserify",
+    "browserify": "browserify dist/movement.js -o dist/browser.bundled.js",
+    "browserify-no-process": "browserify dist/movement.js --insert-global-vars __filename,__dirname,Buffer,global -o dist/browser.bundled.js"
   },
   "author": "",
   "license": "ISC",

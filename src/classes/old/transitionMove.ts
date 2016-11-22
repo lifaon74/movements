@@ -1,5 +1,6 @@
+import { Matrix } from '../matrix.class';
 import { StepperMove } from './stepper';
-import { Matrix } from './matrix.class';
+
 
 export class TransitionMove {
 
@@ -25,7 +26,8 @@ export class TransitionMove {
       m_0 = move_0.moves[i];
       m_1 = move_1.moves[i];
 
-      jerkLimit = Math.min(m_0.stepper.jerkLimit, m_1.stepper.jerkLimit); //  * m_0.direction  * m_1.direction
+      // jerkLimit = Math.min(m_0.stepper.jerkLimit, m_1.stepper.jerkLimit); //  * m_0.direction  * m_1.direction
+      jerkLimit = 0; //  * m_0.direction  * m_1.direction
 
       matrix.values[row] = m_0.value;
       matrix.values[row + col_1] = -m_1.value;
@@ -73,13 +75,15 @@ export class TransitionMove {
 
   getStepperSpeedLimit(): number {
     return Math.min.apply(null, this.moves.map((move: StepperMove) => {
-      return move.stepper.speedLimit / move.steps; // m/s / m => s^-1
+      // return move.stepper.speedLimit / move.steps; // m/s / m => s^-1
+      return 0;
     }));
   }
 
   getStepperAccelerationLimit(): number {
     return Math.min.apply(null, this.moves.map((move: StepperMove) => {
-      return move.stepper.accelerationLimit / move.steps; // m/s^-2 / m => s^-2
+      // return move.stepper.accelerationLimit / move.steps; // m/s^-2 / m => s^-2
+      return 0;
     }));
   }
 

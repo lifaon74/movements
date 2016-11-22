@@ -1,4 +1,8 @@
 
+import { Float } from '../float.class';
+import { Matrix } from '../matrix.class';
+import { StepperMovement, StepperMove } from './stepper';
+
 export class ConstrainedMove {
 
   public direction: number; // 1 or -1

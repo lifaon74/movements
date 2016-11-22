@@ -44,7 +44,7 @@ export class Movement {
     this.getTransitionMove();
     for(let move of this.moves) {
       // console.log(move);
-      console.log(move.getMovement());
+      // console.log(move.getMovement());
     }
     // console.log(movement.moves);
   }

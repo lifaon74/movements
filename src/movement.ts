@@ -1,9 +1,10 @@
 import { GCODEParser, GCODECommand } from './gcodeParser';
 import { Stepper } from './classes/stepper';
 import { ConstrainedMovementsSequence, ConstrainedMovesSequence, StepperMovementsSequence } from './classes/kinematics';
+import { Timer } from './classes/timer.class';
 
 
-let NanoTimer = require('nanotimer');
+// let NanoTimer = require('nanotimer');
 
 
 const stepsPerTurn = 6400;//6400
@@ -12,6 +13,7 @@ const ACCELERATION_LIMIT = stepsPerTurn / (4/1);
 const SPEED_LIMIT = stepsPerTurn / (1/1); // 1 turn / s | max 6.25
 const JERK_LIMIT = stepsPerTurn / 4 ;
 
+const IS_BROWSER = (typeof window !== 'undefined');
 
 interface ICONFIG {
   steppers: Stepper[]
@@ -28,12 +30,11 @@ const CONFIG: ICONFIG = <ICONFIG>{
 
 
 
+class CNCController {
 
-class MovementOptimizer {
-  
   static parseFile(path: string, config: ICONFIG): Promise<ConstrainedMovementsSequence> {
     return GCODEParser.parseFile(path).then((data: GCODECommand[]) => {
-      return MovementOptimizer.parseGCODECommand(data, config);
+      return CNCController.parseGCODECommand(data, config);
     });
   }
 
@@ -121,9 +122,82 @@ class MovementOptimizer {
   }
 
 
-  static executeMovements(stepperMovementsSequence: StepperMovementsSequence, options: any) {
+  public startTime: number;
+  public stepperMovementsSequence: StepperMovementsSequence;
+  public stepperMovementsSequenceIndex: number;
 
+  public times = new Float64Array(1000);
+  public canvas: HTMLCanvasElement;
+  public ctx: CanvasRenderingContext2D;
+
+  constructor(public config: ICONFIG) {
   }
+
+  initCanvas() {
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = 800;
+    this.canvas.height = 800;
+    this.canvas.style.backgroundColor = 'black';
+    document.body.appendChild(this.canvas);
+
+    this.ctx = this.canvas.getContext('2d');
+    this.ctx.fillStyle = 'white';
+    this.ctx.strokeStyle = 'red';
+    this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+  }
+  
+  drawPoint(x: number, y: number) {
+    this.ctx.fillRect(x, y, 1, 1);
+  }
+
+  
+  start(stepperMovementsSequence: StepperMovementsSequence) {
+    this.stepperMovementsSequence       = stepperMovementsSequence;
+    this.stepperMovementsSequenceIndex  = 0;
+
+    if(IS_BROWSER) {
+      this.initCanvas();
+    }
+
+    let time = process.hrtime();
+    this.startTime = time[0] + time[1] / 1e9;
+    this.loop();
+  }
+
+  loop() {
+    let time = process.hrtime();
+    let currentTime = time[0] + time[1] / 1e9;
+    let elapsedTime = (currentTime - this.startTime);
+    this.startTime = currentTime;
+
+    this.times[this.stepperMovementsSequenceIndex] = elapsedTime * 1e6;
+
+
+    // let accelerationFactor: number = elapsedTime * elapsedTime * 0.5;
+    // let move: StepperMove;
+    // let stepsByte: number = 0 | 0;
+    // for(let i = 0, l = this.moves.length; i < l; i++) {
+    //   move = this.moves[i];
+    //   // console.log(move);
+    //   let steps = Math.min(move.steps, Math.round(move.acceleration * accelerationFactor + move.initialSpeed * time));
+    //   let deltaSteps = (steps - move.stepped) ? 1 : 0;
+    //   stepsByte |= deltaSteps << i;
+    //   move.stepped += deltaSteps;
+    // }
+
+    if(IS_BROWSER) {
+      this.drawPoint(this.stepperMovementsSequenceIndex, 0);
+    }
+
+    this.stepperMovementsSequenceIndex++;
+
+    if(this.stepperMovementsSequenceIndex < this.stepperMovementsSequence.length) {
+      process.nextTick(() => this.loop());
+    } else {
+      console.log(this.times.subarray(0, 10));
+    }
+  }
+
 
   // executeMovements(movements: Movement[], callback: (() => any)) {
   //   let movementIndex: number = 0;
@@ -215,41 +289,50 @@ let getSomeData = ():Promise<ConstrainedMovementsSequence> => {
   // });
 
 
-  // return MovementOptimizer.parseFile('../assets/' + 'thin_tower' + '.gcode', CONFIG);
-  // return MovementOptimizer.parseFile('../assets/' + 'fruit_200mm' + '.gcode', CONFIG);
+  // return CNCController.parseFile('../assets/' + 'thin_tower' + '.gcode', CONFIG);
+  // return CNCController.parseFile('../assets/' + 'fruit_200mm' + '.gcode', CONFIG);
 };
 
 
-let t1 = process.hrtime();
-getSomeData().then((movementsSequence: ConstrainedMovementsSequence) => {
-  let t2 = process.hrtime(t1);
-  console.log('opened in', t2[0] + t2[1] / 1e9);
+let start = () => {
+  let timer = new Timer();
+  getSomeData().then((movementsSequence: ConstrainedMovementsSequence) => {
+    timer.disp('opened in', 'ms');
 
-  // console.log(movementsSequence.toString());
+    // console.log(movementsSequence.toString());
 
-  t2 = process.hrtime();
-  movementsSequence.reduce();
-  t2 = process.hrtime(t2);
-  console.log('reduced in', t2[0] + t2[1] / 1e9);
+    timer.clear();
+    // movementsSequence.reduce();
+    timer.disp('reduced in', 'ms');
 
-  t2 = process.hrtime();
-  let stepperMovementsSequence = movementsSequence.optimize();
-  t2 = process.hrtime(t2);
-  console.log('optimized in', t2[0] + t2[1] / 1e9);
+    timer.clear();
+    let stepperMovementsSequence = movementsSequence.optimize();
+    timer.disp('optimized in', 'ms');
 
-  stepperMovementsSequence.compact();
+    stepperMovementsSequence.compact();
+
+    let time = 0;
+    for(let i = 0, length = stepperMovementsSequence.times.length; i < length; i++) {
+      time += stepperMovementsSequence.times[i];
+    }
+
+    console.log(stepperMovementsSequence.toString());
+    console.log(stepperMovementsSequence.length, time);
+
+    let controller = new CNCController(CONFIG);
+    controller.start(stepperMovementsSequence);
+
+    // console.log(movementsSequence.toString(-1, 'speeds'));
+  });
+};
+
+if(IS_BROWSER) {
+  window.onload = start;
+} else {
+  start();
+}
 
 
-  let time = 0;
-  for(let i = 0, length = stepperMovementsSequence.times.length; i < length; i++) {
-    time += stepperMovementsSequence.times[i];
-  }
-
-  console.log(stepperMovementsSequence.toString());
-  console.log(stepperMovementsSequence.length, time);
-
-  // console.log(movementsSequence.toString(-1, 'speeds'));
-});
 
 
 

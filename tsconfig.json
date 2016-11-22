@@ -6,7 +6,7 @@
     "removeComments": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "lib": ["es6", "es2015"],
+    "lib": ["es6", "es2015", "dom"],
     "sourceMap": true,
     "pretty": true,
     "allowUnreachableCode": false,
@@ -15,7 +15,7 @@
     "noImplicitReturns": true,
     "noImplicitUseStrict": false,
     "noFallthroughCasesInSwitch": true,
-	  "outDir": "dist",
+    "outDir": "dist",
     "moduleResolution": "node",
     "typeRoots": [
       "./node_modules/@types",
@@ -25,6 +25,13 @@
       "node"
     ]
   },
+  "include": [
+    "src/movement.ts"
+  ],
+  "//": [
+    "src/**/*",
+    "src/*"
+  ],
   "exclude": [
     "node_modules",
     "dist"

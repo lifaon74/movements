@@ -423,10 +423,8 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
     private _decompose(normalizedMovesSequence: ConstrainedNormalizedMovesSequence, precision: number = 1e-12): StepperMovementsSequence {
       let stepperMovementsSequence = new StepperMovementsSequence(this.moves.length);
       stepperMovementsSequence.require(normalizedMovesSequence.length * 3);
-      stepperMovementsSequence.times = new Float64Array(stepperMovementsSequence.allocated);
       let stepperMovementsSequenceLength: number = 0;
 
-      let value: number;
       let initialSpeed: number, finalSpeed: number;
       let speedLimit: number, accelerationLimit: number;
 
@@ -435,7 +433,6 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
       let d0: number, d1: number, d2: number;
 
       let constrainedMovesSequence: ConstrainedMovesSequence;
-      let stepperMovesSequence: StepperMovesSequence;
 
       for(let i = 0, length = normalizedMovesSequence.length; i < length; i++) {
 
@@ -475,48 +472,40 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 
         // acceleration
         if(!Float.isNull(t0, precision)) {
+          stepperMovementsSequence.times[stepperMovementsSequenceLength] = t0;
+          stepperMovementsSequence.initialSpeeds[stepperMovementsSequenceLength] = normalizedMovesSequence.initialSpeeds[i];
+          stepperMovementsSequence.accelerations[stepperMovementsSequenceLength] = normalizedMovesSequence.accelerationLimits[i];
+
           for(let j = 0; j < this.moves.length; j++) {
-            constrainedMovesSequence  = <ConstrainedMovesSequence>this.moves[j];
-            stepperMovesSequence      = <StepperMovesSequence>stepperMovementsSequence.moves[j];
-            value = constrainedMovesSequence.values[i];
-            stepperMovesSequence.steps[stepperMovementsSequenceLength] = Math.abs(value * d0);
-            stepperMovementsSequence.times[stepperMovementsSequenceLength] = t0;
-            stepperMovesSequence.directions[stepperMovementsSequenceLength] = (Math.sign(value) > 0) ? 1 : 0;
-            stepperMovesSequence.initialSpeeds[stepperMovementsSequenceLength] = normalizedMovesSequence.initialSpeeds[i] * value;
-            stepperMovesSequence.accelerations[stepperMovementsSequenceLength] = normalizedMovesSequence.accelerationLimits[i] * value;
+            stepperMovementsSequence.moves[j][stepperMovementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d0;
           }
+
           stepperMovementsSequenceLength++;
         }
 
         // linear
         if(!Float.isNull(t1, precision)) {
-          for(let j = 0; j < this.moves.length; j++) {
-            constrainedMovesSequence  = <ConstrainedMovesSequence>this.moves[j];
-            stepperMovesSequence      = <StepperMovesSequence>stepperMovementsSequence.moves[j];
-            value = constrainedMovesSequence.values[i];
+          stepperMovementsSequence.times[stepperMovementsSequenceLength] = t1;
+          stepperMovementsSequence.initialSpeeds[stepperMovementsSequenceLength] = v0_max;
+          // stepperMovementsSequence.accelerations[stepperMovementsSequenceLength] = 0;
 
-            stepperMovesSequence.steps[stepperMovementsSequenceLength] = Math.abs(value * d1);
-            stepperMovementsSequence.times[stepperMovementsSequenceLength] = t1;
-            stepperMovesSequence.directions[stepperMovementsSequenceLength] = (Math.sign(value) > 0) ? 1 : 0;
-            stepperMovesSequence.initialSpeeds[stepperMovementsSequenceLength] = v0_max * value;
-            // stepperMovesSequence.accelerations[stepperMovementsSequenceLength] = 0;
+          for(let j = 0; j < this.moves.length; j++) {
+            stepperMovementsSequence.moves[j][stepperMovementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d1;
           }
+
           stepperMovementsSequenceLength++;
         }
 
         // deceleration
         if(!Float.isNull(t2, precision)) {
-          for(let j = 0; j < this.moves.length; j++) {
-            constrainedMovesSequence  = <ConstrainedMovesSequence>this.moves[j];
-            stepperMovesSequence      = <StepperMovesSequence>stepperMovementsSequence.moves[j];
-            value = constrainedMovesSequence.values[i];
+          stepperMovementsSequence.times[stepperMovementsSequenceLength] = t2;
+          stepperMovementsSequence.initialSpeeds[stepperMovementsSequenceLength] = v0_max;
+          stepperMovementsSequence.accelerations[stepperMovementsSequenceLength] = -normalizedMovesSequence.accelerationLimits[i];
 
-            stepperMovesSequence.steps[stepperMovementsSequenceLength] = Math.abs(value * d2);
-            stepperMovementsSequence.times[stepperMovementsSequenceLength] = t2;
-            stepperMovesSequence.directions[stepperMovementsSequenceLength] = (Math.sign(value) > 0) ? 1 : 0;
-            stepperMovesSequence.initialSpeeds[stepperMovementsSequenceLength] = v0_max * value;
-            stepperMovesSequence.accelerations[stepperMovementsSequenceLength] = -normalizedMovesSequence.accelerationLimits[i] * value;
+          for(let j = 0; j < this.moves.length; j++) {
+            stepperMovementsSequence.moves[j][stepperMovementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d2;
           }
+
           stepperMovementsSequenceLength++;
         }
 
@@ -644,7 +633,68 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 }
 
 
-export class StepperMovesSequence extends DynamicSequence {
+
+export class StepperMovementsSequence extends DynamicSequence {
+
+  public times: Float64Array;
+  public initialSpeeds: Float64Array;
+  public accelerations: Float64Array;
+
+  public moves: Float64Array[] = [];
+
+  constructor(numberOfParallelMoves: number) {
+    super();
+
+    this.times          = new Float64Array(this.allocated);
+    this.initialSpeeds  = new Float64Array(this.allocated);
+    this.accelerations  = new Float64Array(this.allocated);
+
+    for(let i = 0; i < numberOfParallelMoves; i++) {
+      this.moves[i] = new Float64Array(this.allocated);
+    }
+  }
+
+  protected transferBuffers() {
+    this.times          = DynamicSequence.sliceTypedArray(this.times, 0, this.allocated);
+    this.initialSpeeds  = DynamicSequence.sliceTypedArray(this.initialSpeeds, 0, this.allocated);
+    this.accelerations  = DynamicSequence.sliceTypedArray(this.accelerations, 0, this.allocated);
+
+    for(let i = 0; i < this.moves.length; i++) {
+      this.moves[i] = DynamicSequence.sliceTypedArray(this.moves[i], 0, this.allocated);
+    }
+  }
+
+
+  toString(index: number = -1, type: string = 'values'): string {
+    if(index === -1) {
+      let str: string = '';
+      for(let i = 0, length = Math.min(30, this.length); i < length; i++) {
+        str += this.toString(i, type) + '\n----\n';
+      }
+      return str;
+    } else {
+      switch(type) {
+        case 'values':
+          return 'time: ' + this.times[index] + ' => ' +
+            this.moves.map((move: Float64Array) => {
+              // return move.toString(index);
+              return '{ ' +
+                  'value: ' + move[index] +
+                ', speed: ' + move[index] * this.initialSpeeds[index] +
+                ', accel: ' + move[index] * this.accelerations[index] +
+                ' }';
+            }).join(', ');
+        default:
+          return '';
+      }
+    }
+  }
+
+}
+
+
+
+export class StepperMovesSequence2 extends DynamicSequence {
   public steps: Float64Array;
   public directions: Uint8Array;
   public initialSpeeds: Float64Array;
@@ -687,7 +737,7 @@ export class StepperMovesSequence extends DynamicSequence {
 }
 
 
-export class StepperMovementsSequence extends DynamicSequenceCollection {
+export class StepperMovementsSequence2 extends DynamicSequenceCollection {
 
   times: Float64Array;
 
