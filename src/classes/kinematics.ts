@@ -347,6 +347,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
         // compute initial speed limit according to accelerationLimit and speedLimit
         initialSpeedLimit = Math.min(
           normalizedMovesSequence.speedLimits[i],
+          normalizedMovesSequence.initialSpeeds[i],
           (accelerationLimit === 0) ?
             finalSpeed : Math.sqrt(finalSpeed * finalSpeed + 2 * accelerationLimit)
         );
@@ -354,7 +355,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
         // build the maximization matrix
         matrix = this._getMaximizationMatrix(
           i - 1, i,
-          Math.min(initialSpeedLimit, normalizedMovesSequence.finalSpeeds[i - 1]), initialSpeedLimit
+          Math.min(initialSpeedLimit, normalizedMovesSequence.finalSpeeds[i - 1]), initialSpeedLimit,
         );
         // get max final and initial speeds
         solutions = Matrix.getStandardMaximizationProblemSolutions(matrix.solveStandardMaximizationProblem());
@@ -464,16 +465,18 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
         t1 = d1 / v0_max;
 
 
-        // console.log('t=>', t0, t1, t2);
+        // console.log('t=>', t0, t1, t2, ta, tb);
         // // console.log('v=>', v0_max, v1_max);
         // console.log('d=>', d0, d1, d2);
         // console.log('--');
 
         // acceleration
         if(!Float.isNull(t0, precision)) {
+          // console.log('i', i, 'vi', initialSpeed, 'vf', finalSpeed, 'al', accelerationLimit);
+
           stepperMovementsSequence.times[stepperMovementsSequenceLength] = t0;
-          stepperMovementsSequence.initialSpeeds[stepperMovementsSequenceLength] = normalizedMovesSequence.initialSpeeds[i];
-          stepperMovementsSequence.accelerations[stepperMovementsSequenceLength] = normalizedMovesSequence.accelerationLimits[i];
+          stepperMovementsSequence.initialSpeeds[stepperMovementsSequenceLength] = initialSpeed / d0;
+          stepperMovementsSequence.accelerations[stepperMovementsSequenceLength] = accelerationLimit / d0;
 
           for(let j = 0; j < this.moves.length; j++) {
             stepperMovementsSequence.moves[j].values[stepperMovementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d0;
@@ -485,7 +488,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
         // linear
         if(!Float.isNull(t1, precision)) {
           stepperMovementsSequence.times[stepperMovementsSequenceLength] = t1;
-          stepperMovementsSequence.initialSpeeds[stepperMovementsSequenceLength] = v0_max;
+          stepperMovementsSequence.initialSpeeds[stepperMovementsSequenceLength] = v0_max / d1;
           // stepperMovementsSequence.accelerations[stepperMovementsSequenceLength] = 0;
 
           for(let j = 0; j < this.moves.length; j++) {
@@ -495,11 +498,11 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
           stepperMovementsSequenceLength++;
         }
 
-        // deceleration
+        // // deceleration
         if(!Float.isNull(t2, precision)) {
           stepperMovementsSequence.times[stepperMovementsSequenceLength] = t2;
-          stepperMovementsSequence.initialSpeeds[stepperMovementsSequenceLength] = v0_max;
-          stepperMovementsSequence.accelerations[stepperMovementsSequenceLength] = -normalizedMovesSequence.accelerationLimits[i];
+          stepperMovementsSequence.initialSpeeds[stepperMovementsSequenceLength] = v0_max / d2;
+          stepperMovementsSequence.accelerations[stepperMovementsSequenceLength] = -normalizedMovesSequence.accelerationLimits[i] / d2;
 
           for(let j = 0; j < this.moves.length; j++) {
             stepperMovementsSequence.moves[j].values[stepperMovementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d2;
@@ -697,11 +700,24 @@ export class StepperMovementsSequence extends DynamicSequence {
           return 'time: ' + this.times[index] + ' => ' +
             this.moves.map((move: StepperMovesSequence) => {
               // return move.toString(index);
+              let value = move.values[index];
               return '{ ' +
-                  'value: ' + move.values[index] +
-                ', speed: ' + move.values[index] * this.initialSpeeds[index] +
-                ', accel: ' + move.values[index] * this.accelerations[index] +
+                  'value: ' + value +
+                ', speed: ' + value * this.initialSpeeds[index] +
+                ', accel: ' + value * this.accelerations[index] +
                 ' }';
+            }).join(', ');
+        case 'times':
+
+          return 'time: ' + this.times[index] + ' => ' +
+            this.moves.map((move: StepperMovesSequence) => {
+              // return move.toString(index);
+              let value = move.values[index];
+              let computed = 0.5 * this.accelerations[index] * this.times[index] * this.times[index] + this.initialSpeeds[index] * this.times[index];
+              return '{ ' +
+                'value: ' + value +
+                ', computed: ' + computed * value +
+                ' }' + (Float.equals(computed, 1, 1e-9)? '' : '=>>>>>>>>[ERROR]');
             }).join(', ');
         default:
           return '';
