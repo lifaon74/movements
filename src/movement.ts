@@ -132,12 +132,16 @@ class CNCController {
   public times = new Float64Array(1000);
   public canvas: HTMLCanvasElement;
   public ctx: CanvasRenderingContext2D;
+  public imageData: ImageData;
+  public color: [number, number, number];
+  public directDraw: boolean = true;
 
   public position: any = {
     x: 0,
     y: 0
   };
 
+  runOutOfTime = 0;
   missedSteps = 0;
 
   constructor(public config: ICONFIG) {
@@ -153,11 +157,28 @@ class CNCController {
     this.ctx = this.canvas.getContext('2d');
     this.ctx.fillStyle = 'white';
     this.ctx.strokeStyle = 'red';
-    this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+    this.color = [255, 255, 255];
+
+    if(this.directDraw) {
+      this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+    } else {
+      this.imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    }
+
   }
   
   drawPoint(x: number, y: number) {
-    this.ctx.fillRect(x, y, 1, 1);
+    if(this.directDraw) {
+      this.ctx.fillRect(x, y, 1, 1);
+    } else {
+      x -= this.canvas.width / 2;
+      y += this.canvas.height / 2;
+      let i = (Math.round(x) + Math.round(y) * this.imageData.width) * 4;
+      this.imageData.data[i + 0] = this.color[0];
+      this.imageData.data[i + 1] = this.color[1];
+      this.imageData.data[i + 2] = this.color[2];
+      this.imageData.data[i + 3] = 255;
+    }
   }
 
   
@@ -198,8 +219,9 @@ class CNCController {
         finished = false;
 
         if(elapsedTime > this.stepperMovementsSequence.times[this.index]) {
-          deltaSteps = 1;
-          this.missedSteps++;
+          this.runOutOfTime++;
+          let steps = distance;
+          deltaSteps = (steps - position) ? 1 : 0;
         } else {
           let steps = Math.round(Math.min(1,
               this.stepperMovementsSequence.accelerations[this.index] * accelerationFactor +
@@ -236,10 +258,14 @@ class CNCController {
       this.times[this.index] = elapsedTime;
       this.index++;
       this.startTime = currentTime;
-      this.ctx.fillStyle = 'rgb(' +
-        Math.floor(Math.random() * 255) + ', ' +
-        Math.floor(Math.random() * 255) + ', ' +
-        Math.floor(Math.random() * 255) + ')';
+      this.color = [Math.floor(Math.random() * 255),  Math.floor(Math.random() * 255),  Math.floor(Math.random() * 255)];
+
+      if(IS_BROWSER && this.directDraw) {
+        this.ctx.fillStyle = 'rgb(' +
+          this.color[0] + ', ' +
+          this.color[1] + ', ' +
+          this.color[2] + ')';
+      }
     }
 
     if(IS_BROWSER && stepsByte) {
@@ -247,10 +273,18 @@ class CNCController {
     }
 
     if(this.index < this.stepperMovementsSequence.length) {
-      // process.nextTick(() => this.loop());
-      setTimeout(() => this.loop(), 0);
+      if(IS_BROWSER && this.directDraw) {
+        setTimeout(() => this.loop(), 0);
+      } else {
+        process.nextTick(() => this.loop());
+      }
     } else {
+      if(IS_BROWSER && !this.directDraw) {
+        this.ctx.putImageData(this.imageData, 0, 0);
+      }
+
       console.log('missed', this.missedSteps);
+      console.log('run out of time', this.runOutOfTime);
       console.log('pos', this.position);
       console.log(this.times.subarray(0, 10));
     }
@@ -328,7 +362,7 @@ let buildLinearMovementsSequence = (): ConstrainedMovementsSequence  => {
 
 let buildCircleMovementsSequence = (): ConstrainedMovementsSequence  => {
   let movementsSequence = new ConstrainedMovementsSequence(2);
-  movementsSequence.length = 10000;
+  movementsSequence.length = 100;
   let radius = 20;
 
   for(let i = 0, length = movementsSequence.length; i < length ; i++) {
@@ -407,7 +441,7 @@ let start = () => {
     console.log(stepperMovementsSequence.length, 't', time, 'x', x, 'y', y);
 
     let controller = new CNCController(CONFIG);
-    // controller.start(stepperMovementsSequence);
+    controller.start(stepperMovementsSequence);
 
     // console.log(movementsSequence.toString(-1, 'speeds'));
   });
