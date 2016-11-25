@@ -213,7 +213,6 @@ export class ConstrainedNormalizedMovesSequence extends DynamicSequence {
 }
 
 
-
 /**
  * A Movement is a set of entangled ConstrainedMovesSequence
  *
@@ -520,6 +519,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
       return stepperMovementsSequence;
     }
 
+
   // Move the movement at index_1 into the movement at index_0
   move(index_0: number, index_1: number) {
     for(let i = 0; i < this.moves.length; i++) {
@@ -637,16 +637,29 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 
 export class StepperMovesSequence extends DynamicSequence {
   public values: Float64Array;
-  public positions: Float64Array;
+  public positions: Uint32Array;
 
 
   constructor(size?: number) {
     super(size);
 
     this.values     = new Float64Array(this.allocated);
-    this.positions  = new Float64Array(this.allocated);
+    this.positions  = new Uint32Array(this.allocated);
   }
 
+
+  round() {
+    let position: number = 0; // true position
+    let roundedPosition = 0;
+
+    for(let i = 0; i < this._length; i++) {
+      let value: number = this.values[i];
+      position += value;
+      let delta = Math.round(position - roundedPosition);
+      roundedPosition += delta;
+      this.values[i] = delta;
+    }
+  }
 
   protected transferBuffers() {
     this.values     = DynamicSequence.sliceTypedArray(this.values, 0, this.allocated);
@@ -676,14 +689,42 @@ export class StepperMovementsSequence extends DynamicSequence {
     }
   }
 
+  get length(): number {
+    return this._length;
+  }
+
+  set length(length: number) {
+    this._length = length;
+    for(let i = 0; i < this.moves.length; i++) {
+      this.moves[i].length = length;
+    }
+    this.require(length);
+  }
+
+  allocate(size: number): this {
+    for(let i = 0; i < this.moves.length; i++) {
+      this.moves[i].allocate(size);
+    }
+    return super.allocate(size);
+  }
+
+  compact(): this {
+    for(let i = 0; i < this.moves.length; i++) {
+      this.moves[i].compact();
+    }
+    return super.compact();
+  }
+
+  round() {
+    for(let i = 0; i < this.moves.length; i++) {
+      this.moves[i].round();
+    }
+  }
+
   protected transferBuffers() {
     this.times          = DynamicSequence.sliceTypedArray(this.times, 0, this.allocated);
     this.initialSpeeds  = DynamicSequence.sliceTypedArray(this.initialSpeeds, 0, this.allocated);
     this.accelerations  = DynamicSequence.sliceTypedArray(this.accelerations, 0, this.allocated);
-
-    for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i].require(this.allocated);
-    }
   }
 
 
@@ -708,7 +749,6 @@ export class StepperMovementsSequence extends DynamicSequence {
                 ' }';
             }).join(', ');
         case 'times':
-
           return 'time: ' + this.times[index] + ' => ' +
             this.moves.map((move: StepperMovesSequence) => {
               // return move.toString(index);

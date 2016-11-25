@@ -420,7 +420,7 @@ let start = () => {
     // console.log(movementsSequence.toString());
 
     timer.clear();
-    movementsSequence.reduce();
+    // movementsSequence.reduce();
     timer.disp('reduced in', 'ms');
 
     timer.clear();
@@ -429,6 +429,8 @@ let start = () => {
 
     stepperMovementsSequence.compact();
 
+    stepperMovementsSequence.round();
+
     let time = 0, x = 0, y = 0;
     for(let i = 0, length = stepperMovementsSequence.times.length; i < length; i++) {
       time += stepperMovementsSequence.times[i];
@@ -436,7 +438,7 @@ let start = () => {
       y += stepperMovementsSequence.moves[1].values[i];
     }
 
-    // console.log(stepperMovementsSequence.toString());
+    console.log(stepperMovementsSequence.toString());
     // console.log(stepperMovementsSequence.toString(-1, 'times'));
     console.log(stepperMovementsSequence.length, 't', time, 'x', x, 'y', y);
 
