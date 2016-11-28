@@ -650,12 +650,11 @@ export class StepperMovesSequence extends DynamicSequence {
 
   round() {
     let position: number = 0; // true position
-    let roundedPosition = 0;
-
+    let roundedPosition: number = 0;
+    let delta: number;
     for(let i = 0; i < this._length; i++) {
-      let value: number = this.values[i];
-      position += value;
-      let delta = Math.round(position - roundedPosition);
+      position += this.values[i];
+      delta = Math.round(position - roundedPosition);
       roundedPosition += delta;
       this.values[i] = delta;
     }
@@ -727,7 +726,6 @@ export class StepperMovementsSequence extends DynamicSequence {
     this.accelerations  = DynamicSequence.sliceTypedArray(this.accelerations, 0, this.allocated);
   }
 
-
   toString(index: number = -1, type: string = 'values'): string {
     if(index === -1) {
       let str: string = '';
@@ -764,7 +762,6 @@ export class StepperMovementsSequence extends DynamicSequence {
       }
     }
   }
-
 }
 
 

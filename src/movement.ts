@@ -12,8 +12,8 @@ import { Timer } from './classes/timer.class';
 
 const stepsPerTurn = 10;//6400  => /160
 
-const ACCELERATION_LIMIT = stepsPerTurn / (1 / 1);
-const SPEED_LIMIT = stepsPerTurn / (1/10); // 1 turn / s | max 6.25
+const ACCELERATION_LIMIT = stepsPerTurn / (1 / 4);
+const SPEED_LIMIT = stepsPerTurn / (1/4); // 1 turn / s | max 6.25
 const JERK_LIMIT = stepsPerTurn / (1/1);
 
 const IS_BROWSER = (typeof window !== 'undefined');
@@ -136,6 +136,7 @@ class CNCController {
   public color: [number, number, number];
   public directDraw: boolean = true;
 
+
   public position: any = {
     x: 0,
     y: 0
@@ -220,10 +221,9 @@ class CNCController {
 
         if(elapsedTime > this.stepperMovementsSequence.times[this.index]) {
           this.runOutOfTime++;
-          let steps = distance;
-          deltaSteps = (steps - position) ? 1 : 0;
+          deltaSteps = 1;
         } else {
-          let steps = Math.round(Math.min(1,
+          let steps = Math.floor(Math.min(1,
               this.stepperMovementsSequence.accelerations[this.index] * accelerationFactor +
               this.stepperMovementsSequence.initialSpeeds[this.index] * elapsedTime
             ) * distance);
@@ -420,7 +420,7 @@ let start = () => {
     // console.log(movementsSequence.toString());
 
     timer.clear();
-    // movementsSequence.reduce();
+    movementsSequence.reduce();
     timer.disp('reduced in', 'ms');
 
     timer.clear();
