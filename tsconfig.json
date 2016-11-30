@@ -15,11 +15,9 @@
     "noImplicitReturns": true,
     "noImplicitUseStrict": false,
     "noFallthroughCasesInSwitch": true,
-    "outDir": "dist",
     "moduleResolution": "node",
     "typeRoots": [
-      "./node_modules/@types",
-      "./node_modules"
+      "./node_modules/@types"
     ],
     "types": [
       "node"
@@ -34,7 +32,8 @@
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "src"
   ],
-  "compileOnSave": true
+  "compileOnSave": false
 }

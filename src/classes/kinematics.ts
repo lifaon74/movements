@@ -3,13 +3,13 @@ import { Float } from './float.class';
 
 export abstract class DynamicSequence {
 
-  static sliceTypedArray(typedArray: any, start: number, end: number) {
+  static sliceTypedArray(typedArray: any, start: number, end: number, copy: boolean = true) {
     if((start < 0) || (end > typedArray.length)) {
       let array = new typedArray.constructor(end - start);
       array.set(typedArray.subarray(Math.max(0, start), Math.min(typedArray.length, end)), Math.abs(start));
       return array;
     } else {
-      return typedArray.subarray(start, end);
+      return copy ? typedArray.slice(start, end) : typedArray.subarray(start, end);
     }
   }
 
@@ -144,10 +144,10 @@ export class ConstrainedMovesSequence extends DynamicSequence {
   }
 
   protected transferBuffers() {
-    this.values             = DynamicSequence.sliceTypedArray(this.values, 0, this.allocated);
-    this.speedLimits        = DynamicSequence.sliceTypedArray(this.speedLimits, 0, this.allocated);
-    this.accelerationLimits = DynamicSequence.sliceTypedArray(this.accelerationLimits, 0, this.allocated);
-    this.jerkLimits         = DynamicSequence.sliceTypedArray(this.jerkLimits, 0, this.allocated);
+    this.values             = DynamicSequence.sliceTypedArray(this.values, 0, this.allocated, false);
+    this.speedLimits        = DynamicSequence.sliceTypedArray(this.speedLimits, 0, this.allocated, false);
+    this.accelerationLimits = DynamicSequence.sliceTypedArray(this.accelerationLimits, 0, this.allocated, false);
+    this.jerkLimits         = DynamicSequence.sliceTypedArray(this.jerkLimits, 0, this.allocated, false);
   }
 
   /**
@@ -205,10 +205,10 @@ export class ConstrainedNormalizedMovesSequence extends DynamicSequence {
   }
 
   protected transferBuffers() {
-    this.initialSpeeds      = DynamicSequence.sliceTypedArray(this.initialSpeeds, 0, this.allocated);
-    this.finalSpeeds        = DynamicSequence.sliceTypedArray(this.finalSpeeds, 0, this.allocated);
-    this.speedLimits        = DynamicSequence.sliceTypedArray(this.speedLimits, 0, this.allocated);
-    this.accelerationLimits = DynamicSequence.sliceTypedArray(this.accelerationLimits, 0, this.allocated);
+    this.initialSpeeds      = DynamicSequence.sliceTypedArray(this.initialSpeeds, 0, this.allocated, false);
+    this.finalSpeeds        = DynamicSequence.sliceTypedArray(this.finalSpeeds, 0, this.allocated, false);
+    this.speedLimits        = DynamicSequence.sliceTypedArray(this.speedLimits, 0, this.allocated, false);
+    this.accelerationLimits = DynamicSequence.sliceTypedArray(this.accelerationLimits, 0, this.allocated, false);
   }
 
   /**
@@ -722,12 +722,12 @@ export class OptimizedMovementsSequence extends DynamicSequence {
   }
 
   protected transferBuffers() {
-    this.times          = DynamicSequence.sliceTypedArray(this.times, 0, this.allocated);
-    this.initialSpeeds  = DynamicSequence.sliceTypedArray(this.initialSpeeds, 0, this.allocated);
-    this.accelerations  = DynamicSequence.sliceTypedArray(this.accelerations, 0, this.allocated);
+    this.times          = DynamicSequence.sliceTypedArray(this.times, 0, this.allocated, false);
+    this.initialSpeeds  = DynamicSequence.sliceTypedArray(this.initialSpeeds, 0, this.allocated, false);
+    this.accelerations  = DynamicSequence.sliceTypedArray(this.accelerations, 0, this.allocated, false);
 
     for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i] = DynamicSequence.sliceTypedArray(this.moves[i], 0, this.allocated);
+      this.moves[i] = DynamicSequence.sliceTypedArray(this.moves[i], 0, this.allocated, false);
     }
   }
 
@@ -795,8 +795,8 @@ export class StepperMovesSequence extends DynamicSequence {
   }
 
   protected transferBuffers() {
-    this.values     = DynamicSequence.sliceTypedArray(this.values, 0, this.allocated);
-    this.positions  = DynamicSequence.sliceTypedArray(this.positions, 0, this.allocated);
+    this.values     = DynamicSequence.sliceTypedArray(this.values, 0, this.allocated, false);
+    this.positions  = DynamicSequence.sliceTypedArray(this.positions, 0, this.allocated, false);
   }
 }
 
@@ -880,9 +880,9 @@ export class StepperMovementsSequence extends DynamicSequence {
   }
 
   protected transferBuffers() {
-    this.times          = DynamicSequence.sliceTypedArray(this.times, 0, this.allocated);
-    this.initialSpeeds  = DynamicSequence.sliceTypedArray(this.initialSpeeds, 0, this.allocated);
-    this.accelerations  = DynamicSequence.sliceTypedArray(this.accelerations, 0, this.allocated);
+    this.times          = DynamicSequence.sliceTypedArray(this.times, 0, this.allocated, false);
+    this.initialSpeeds  = DynamicSequence.sliceTypedArray(this.initialSpeeds, 0, this.allocated, false);
+    this.accelerations  = DynamicSequence.sliceTypedArray(this.accelerations, 0, this.allocated, false);
   }
 
   /**

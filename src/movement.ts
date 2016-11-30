@@ -6,15 +6,16 @@ import {
 } from './classes/kinematics';
 import { Timer } from './classes/timer.class';
 
+// node --inspect --debug-brk movement.js
 
 // let NanoTimer = require('nanotimer');
 
 
-const stepsPerTurn = 100;//6400  => /160
+const stepsPerTurn = 10;//6400  => /160
 
 const ACCELERATION_LIMIT = stepsPerTurn / (1 / 4);
 const SPEED_LIMIT = stepsPerTurn / (1/2); // 1 turn / s | max 6.25
-const JERK_LIMIT = stepsPerTurn / (100/1);
+const JERK_LIMIT = stepsPerTurn / (1/1);
 
 const IS_BROWSER = (typeof window !== 'undefined');
 
@@ -30,7 +31,6 @@ const CONFIG: ICONFIG = <ICONFIG>{
     new Stepper('e', 1e10, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn),
   ]
 };
-
 
 
 class CNCController {
@@ -124,7 +124,6 @@ class CNCController {
     return movementsSequence;
   }
 
-
   public startTime: number;
   public stepperMovementsSequence: StepperMovementsSequence;
   public index: number;
@@ -150,8 +149,8 @@ class CNCController {
 
   initCanvas() {
     this.canvas = document.createElement('canvas');
-    this.canvas.width = 800 * 5;
-    this.canvas.height = 800 * 5;
+    this.canvas.width = 800;
+    this.canvas.height = 800;
     this.canvas.style.backgroundColor = 'black';
     document.body.appendChild(this.canvas);
 
@@ -276,7 +275,7 @@ class CNCController {
 
     if(IS_BROWSER && stepsByte) {
       // console.log(this.position);
-      this.drawPoint(this.position.x / stepsPerTurn * 40 * 5, this.position.y / stepsPerTurn * 40 * 5);
+      this.drawPoint(this.position.x / stepsPerTurn * 40, this.position.y / stepsPerTurn * 40);
     }
 
     if(this.index < this.stepperMovementsSequence.length) {
@@ -293,7 +292,13 @@ class CNCController {
       console.log('missed', this.missedSteps);
       console.log('run out of time', this.runOutOfTime);
       console.log('pos', this.position);
-      console.log(this.times.subarray(0, 10));
+
+      let time = 0;
+      for(let i = 0, length = this.times.length; i < length; i++) {
+        time += this.times[i];
+      }
+      console.log('time', time);
+      // console.log(this.times.subarray(0, 10));
     }
   }
 
@@ -396,9 +401,9 @@ let getSomeData = ():Promise<ConstrainedMovementsSequence> => {
   //   resolve(buildLinearMovementsSequence());
   // });
 
-  // return new Promise((resolve: any, reject: any) => {
-  //   resolve(buildCircleMovementsSequence());
-  // });
+  return new Promise((resolve: any, reject: any) => {
+    resolve(buildCircleMovementsSequence());
+  });
 
   // return new Promise((resolve: any, reject: any) => {
   //   let movements = new ConstrainedMovementsSequence(2);
@@ -417,39 +422,39 @@ let getSomeData = ():Promise<ConstrainedMovementsSequence> => {
   // return CNCController.parseFile('../assets/' + 'thin_tower' + '.gcode', CONFIG);
   // return CNCController.parseFile('../assets/' + 'fruit_200mm' + '.gcode', CONFIG);
 
-  return new Promise((resolve: any, reject: any) => {
-    let dropElement = document.body;
-
-    dropElement.addEventListener('dragover', (event: DragEvent) => {
-      event.stopPropagation();
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'copy';
-      return false;
-    });
-
-    dropElement.addEventListener('drop', (event: DragEvent) => {
-      event.stopPropagation();
-      event.preventDefault();
-
-      let files: FileList = event.dataTransfer.files;
-      if(files.length > 0) {
-        let file: File = files[0];
-        let reader = new FileReader();
-        reader.addEventListener('load', (event: any) => {
-          resolve(CNCController.parseGCODECommand(GCODEParser.parse(event.target.result), CONFIG));
-        });
-
-        reader.addEventListener('error', (error: any) => {
-          reject(error);
-        });
-
-        reader.readAsText(file);
-      }
-
-      return false;
-    });
-
-  });
+  // return new Promise((resolve: any, reject: any) => {
+  //   let dropElement = document.body;
+  //
+  //   dropElement.addEventListener('dragover', (event: DragEvent) => {
+  //     event.stopPropagation();
+  //     event.preventDefault();
+  //     event.dataTransfer.dropEffect = 'copy';
+  //     return false;
+  //   });
+  //
+  //   dropElement.addEventListener('drop', (event: DragEvent) => {
+  //     event.stopPropagation();
+  //     event.preventDefault();
+  //
+  //     let files: FileList = event.dataTransfer.files;
+  //     if(files.length > 0) {
+  //       let file: File = files[0];
+  //       let reader = new FileReader();
+  //       reader.addEventListener('load', (event: any) => {
+  //         resolve(CNCController.parseGCODECommand(GCODEParser.parse(event.target.result), CONFIG));
+  //       });
+  //
+  //       reader.addEventListener('error', (error: any) => {
+  //         reject(error);
+  //       });
+  //
+  //       reader.readAsText(file);
+  //     }
+  //
+  //     return false;
+  //   });
+  //
+  // });
 };
 
 
@@ -490,7 +495,7 @@ let start = () => {
 
     timer.disp('converted in', 'ms');
 
-    console.log(stepperMovementsSequence.toString());
+    // console.log(stepperMovementsSequence.toString());
 
     let controller = new CNCController(CONFIG);
     controller.start(stepperMovementsSequence);
@@ -498,6 +503,7 @@ let start = () => {
     // console.log(movementsSequence.toString(-1, 'speeds'));
   });
 };
+
 
 if(IS_BROWSER) {
   window.onload = start;
