@@ -127,8 +127,10 @@ class CNCController {
   public startTime: number;
   public stepperMovementsSequence: StepperMovementsSequence;
   public index: number;
+  public buffer: Uint8Array;
+  public onEndCallback: (() => any);
 
-  public times = new Float64Array(1000);
+  public times: Float64Array;
   public canvas: HTMLCanvasElement;
   public ctx: CanvasRenderingContext2D;
   public imageData: ImageData;
@@ -182,10 +184,23 @@ class CNCController {
   }
 
   
-  start(stepperMovementsSequence: StepperMovementsSequence) {
+  run(stepperMovementsSequence: StepperMovementsSequence, onEndCallback: (() => any) = (() => { /* noop*/ }) ) {
     this.stepperMovementsSequence = stepperMovementsSequence;
     this.index  = 0;
+    this.buffer = new Uint8Array([
+      0b00000000, // steps
+      0b00000000, // directions
+      0b11111111, // enable
+      0b00000000, // pwm
+    ]);
 
+    this.onEndCallback = onEndCallback;
+
+
+    // debug only
+    this.times = new Float64Array(stepperMovementsSequence.length);
+
+    // debug only
     if(IS_BROWSER) {
       this.initCanvas();
     }
@@ -195,43 +210,47 @@ class CNCController {
     this.loop();
   }
 
-  loop() {
+  private loop() {
     let time = process.hrtime();
-    let currentTime = time[0] + time[1] / 1e9;
-    let elapsedTime = (currentTime - this.startTime);
-
-    // console.log("============", elapsedTime);
+    let currentTime: number = time[0] + time[1] / 1e9;
+    let elapsedTime: number = (currentTime - this.startTime);
 
     let accelerationFactor: number = elapsedTime * elapsedTime * 0.5;
     let move: StepperMovesSequence;
+    let value: number;
+    let distance: number;
+    let position: number;
+    let expectedPosition: number;
     let deltaSteps: number;
     let stepsByte: number = 0 | 0;
     let directionByte: number = 0 | 0;
     let finished: boolean = true;
 
+
     for(let i = 0; i < this.stepperMovementsSequence.moves.length; i++) {
-      move = this.stepperMovementsSequence.moves[i];
-      let value = move.values[this.index];
-      let distance = Math.abs(value);
-      let position = move.positions[this.index];
+      move      = this.stepperMovementsSequence.moves[i];
+      value     = move.values[this.index];
+      distance  = Math.abs(value);
+      position  = move.positions[this.index];
 
       if(position < distance) {
         finished = false;
 
         if(elapsedTime > this.stepperMovementsSequence.times[this.index]) {
-          this.runOutOfTime++;
+          this.runOutOfTime++; // debug only
           deltaSteps = 1;
         } else {
-          let steps = Math.floor(Math.min(1,
-              this.stepperMovementsSequence.accelerations[this.index] * accelerationFactor +
-              this.stepperMovementsSequence.initialSpeeds[this.index] * elapsedTime
-            ) * distance);
+          expectedPosition = Math.floor(Math.min(1,
+            this.stepperMovementsSequence.accelerations[this.index] * accelerationFactor +
+            this.stepperMovementsSequence.initialSpeeds[this.index] * elapsedTime
+          ) * distance);
 
-          if(steps - position > 2) {
+            // debug only
+          if(expectedPosition - position > 2) {
             this.missedSteps++;
           }
 
-          deltaSteps = (steps - position) ? 1 : 0;
+          deltaSteps = (expectedPosition - position) ? 1 : 0;
         }
       } else {
         deltaSteps = 0;
@@ -244,27 +263,36 @@ class CNCController {
 
     }
 
+    this.buffer[0] = stepsByte;
+    this.buffer[1] = directionByte;
+
+
+    // debug only
     if(stepsByte & 0b00000001) {
       this.position.x += (directionByte & 0b00000001) ? 1 : - 1;
     }
 
+    // debug only
     if(stepsByte & 0b00000010) {
       this.position.y += (directionByte & 0b00000010) ? 1 : - 1;
     }
 
+    // debug only
     if(stepsByte & 0b00000100) {
       if(IS_BROWSER && this.directDraw) {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       }
     }
-    // console.log(stepsByte.toString(2));
 
     if(finished) {
-      this.times[this.index] = elapsedTime;
+      this.times[this.index] = elapsedTime; // debug only
       this.index++;
       this.startTime = currentTime;
+
+      // debug only
       this.color = [Math.floor(Math.random() * 255),  Math.floor(Math.random() * 255),  Math.floor(Math.random() * 255)];
 
+      // debug only
       if(IS_BROWSER && this.directDraw) {
         this.ctx.fillStyle = 'rgb(' +
           this.color[0] + ', ' +
@@ -273,33 +301,43 @@ class CNCController {
       }
     }
 
+    // debug only
     if(IS_BROWSER && stepsByte) {
       // console.log(this.position);
       this.drawPoint(this.position.x / stepsPerTurn * 40, this.position.y / stepsPerTurn * 40);
     }
 
-    if(this.index < this.stepperMovementsSequence.length) {
-      if(IS_BROWSER && this.directDraw) {
+    if(this.index < this.stepperMovementsSequence._length) {
+      if(IS_BROWSER && this.directDraw) { // debug only
         setTimeout(() => this.loop(), 0);
       } else {
         process.nextTick(() => this.loop());
       }
     } else {
+      // debug only
       if(IS_BROWSER && !this.directDraw) {
         this.ctx.putImageData(this.imageData, 0, 0);
       }
 
+      // debug only
       console.log('missed', this.missedSteps);
       console.log('run out of time', this.runOutOfTime);
       console.log('pos', this.position);
 
+      // debug only
       let time = 0;
       for(let i = 0, length = this.times.length; i < length; i++) {
         time += this.times[i];
       }
       console.log('time', time);
-      // console.log(this.times.subarray(0, 10));
+      // console.log(this.times);
+
+      this.onEndCallback();
     }
+  }
+
+  private stepLoop() {
+
   }
 
 
@@ -375,7 +413,7 @@ let buildLinearMovementsSequence = (): ConstrainedMovementsSequence  => {
 let buildCircleMovementsSequence = (): ConstrainedMovementsSequence  => {
   let movementsSequence = new ConstrainedMovementsSequence(2);
   movementsSequence.length = 100;
-  let radius = 20;
+  let radius = stepsPerTurn * 2;
 
   for(let i = 0, length = movementsSequence.length; i < length ; i++) {
     let a0 = (Math.PI * 2 * i / length);
@@ -485,7 +523,7 @@ let start = () => {
     // console.log(optimizedMovementsSequence.toString());
     // console.log(optimizedMovementsSequence.toString(-1, 'times'));
     console.log(optimizedMovementsSequence.length, 't', time, 'x', x, 'y', y);
-
+    // console.log(optimizedMovementsSequence.times);
 
     timer.clear();
     let stepperMovementsSequence = optimizedMovementsSequence.toStepperMovementsSequence();
@@ -496,9 +534,10 @@ let start = () => {
     timer.disp('converted in', 'ms');
 
     // console.log(stepperMovementsSequence.toString());
+    // console.log(stepperMovementsSequence.times);
 
     let controller = new CNCController(CONFIG);
-    controller.start(stepperMovementsSequence);
+    controller.run(stepperMovementsSequence);
 
     // console.log(movementsSequence.toString(-1, 'speeds'));
   });
