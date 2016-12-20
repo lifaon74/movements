@@ -19,6 +19,7 @@ const JERK_LIMIT = stepsPerTurn / (1/1);
 
 const IS_BROWSER = (typeof window !== 'undefined');
 
+
 interface ICONFIG {
   steppers: Stepper[]
 }
@@ -31,6 +32,7 @@ const CONFIG: ICONFIG = <ICONFIG>{
     new Stepper('e', 1e10, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn),
   ]
 };
+
 
 
 class CNCController {
@@ -123,6 +125,7 @@ class CNCController {
 
     return movementsSequence;
   }
+
 
   public startTime: number;
   public stepperMovementsSequence: StepperMovementsSequence;
