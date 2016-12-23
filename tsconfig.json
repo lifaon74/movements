@@ -24,16 +24,12 @@
     ]
   },
   "include": [
-    "src/movement.ts"
-  ],
-  "//": [
     "src/**/*",
     "src/*"
   ],
   "exclude": [
     "node_modules",
-    "dist",
-    "src"
+    "dist"
   ],
   "compileOnSave": false
 }

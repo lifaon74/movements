@@ -20,19 +20,34 @@ const JERK_LIMIT = stepsPerTurn / (1/1);
 const IS_BROWSER = (typeof window !== 'undefined');
 
 
+export class PWMController {
+  constructor(public analogChannel: number,
+              public pwmChannel: number,
+              public getPWM: (analogValue: number, targetValue: number, currentPWMValue: number) => number) {
+  }
+}
+
 interface ICONFIG {
-  steppers: Stepper[]
+  steppers: Stepper[],
+  PWMControllers: PWMController[]
 }
 
 const CONFIG: ICONFIG = <ICONFIG>{
   steppers: [
-    new Stepper('x', ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn), // 160
-    new Stepper('y', ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn),
-    new Stepper('z', ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn), // 3316.36
-    new Stepper('e', 1e10, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn),
+    new Stepper('x', 0, 0, 1, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn), // 160
+    new Stepper('y', 1, 2, 3, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn),
+    new Stepper('z', 2, 4, 5, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn), // 3316.36
+    new Stepper('e', 3, null, null, 1e10, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn),
+  ],
+  PWMControllers: [
+    new PWMController(0, 0, (analogValue: number, targetValue: number, currentPWMValue: number) => {
+      return (targetValue / analogValue) * currentPWMValue;
+    })
   ]
 };
 
+class CommandsGrouper {
+}
 
 
 class CNCController {
@@ -70,7 +85,6 @@ class CNCController {
         case 'G0':
         case 'G1':
           // console.log(command.params);
-
           for(let i = 0; i < config.steppers.length; i++) {
             stepper        = config.steppers[i];
             movesSequence  = <ConstrainedMovesSequence>movementsSequence.moves[i];
@@ -89,13 +103,13 @@ class CNCController {
                 localConfig.position[stepper.name] += value;
               }
             }
-            
-            movesSequence.values[movementsSequenceLength]             = delta;
-            movesSequence.speedLimits[movementsSequenceLength]        = stepper.speedLimit;
-            movesSequence.accelerationLimits[movementsSequenceLength] = stepper.accelerationLimit;
-            movesSequence.jerkLimits[movementsSequenceLength]         = stepper.jerkLimit;
-          }
 
+            movesSequence._buffers.values[movementsSequenceLength]             = delta;
+            movesSequence._buffers.speedLimits[movementsSequenceLength]        = stepper.speedLimit;
+            movesSequence._buffers.accelerationLimits[movementsSequenceLength] = stepper.accelerationLimit;
+            movesSequence._buffers.jerkLimits[movementsSequenceLength]         = stepper.jerkLimit;
+          }
+          movementsSequence._buffers.indices[movementsSequenceLength] = j;
           movementsSequenceLength++;
           break;
 
@@ -126,6 +140,11 @@ class CNCController {
     return movementsSequence;
   }
 
+  static buildTemperaturePWMController(): PWMController { // TODO
+    return new PWMController(0, 0, (analogValue: number, targetValue: number, currentPWMValue: number) => {
+      return (targetValue / analogValue) * currentPWMValue;
+    });
+  }
 
   public startTime: number;
   public stepperMovementsSequence: StepperMovementsSequence;
@@ -232,20 +251,20 @@ class CNCController {
 
     for(let i = 0; i < this.stepperMovementsSequence.moves.length; i++) {
       move      = this.stepperMovementsSequence.moves[i];
-      value     = move.values[this.index];
+      value     = move._buffers.values[this.index];
       distance  = Math.abs(value);
-      position  = move.positions[this.index];
+      position  = move._buffers.positions[this.index];
 
       if(position < distance) {
         finished = false;
 
-        if(elapsedTime > this.stepperMovementsSequence.times[this.index]) {
+        if(elapsedTime > this.stepperMovementsSequence._buffers.times[this.index]) {
           this.runOutOfTime++; // debug only
           deltaSteps = 1;
         } else {
           expectedPosition = Math.floor(Math.min(1,
-            this.stepperMovementsSequence.accelerations[this.index] * accelerationFactor +
-            this.stepperMovementsSequence.initialSpeeds[this.index] * elapsedTime
+            this.stepperMovementsSequence._buffers.accelerations[this.index] * accelerationFactor +
+            this.stepperMovementsSequence._buffers.initialSpeeds[this.index] * elapsedTime
           ) * distance);
 
             // debug only
@@ -259,7 +278,7 @@ class CNCController {
         deltaSteps = 0;
       }
 
-      move.positions[this.index] += deltaSteps;
+      move._buffers.positions[this.index] += deltaSteps;
       stepsByte |= deltaSteps << i;
       directionByte |= ((Math.sign(value) < 0) ? 0 : 1)  << i;
       // console.log(steps, value, position, deltaSteps);
@@ -383,10 +402,10 @@ let simpleMovement = (movementsSequence: ConstrainedMovementsSequence, values: n
   for(let i = 0; i < movementsSequence.moves.length; i++) {
     movesSequence = <ConstrainedMovesSequence>movementsSequence.moves[i];
 
-    movesSequence.values[index] = values[i];
-    movesSequence.speedLimits[index] = CONFIG.steppers[i].speedLimit;
-    movesSequence.accelerationLimits[index] = CONFIG.steppers[i].accelerationLimit;
-    movesSequence.jerkLimits[index] = CONFIG.steppers[i].jerkLimit;
+    movesSequence._buffers.values[index] = values[i];
+    movesSequence._buffers.speedLimits[index] = CONFIG.steppers[i].speedLimit;
+    movesSequence._buffers.accelerationLimits[index] = CONFIG.steppers[i].accelerationLimit;
+    movesSequence._buffers.jerkLimits[index] = CONFIG.steppers[i].jerkLimit;
   }
 };
 
@@ -403,10 +422,10 @@ let buildLinearMovementsSequence = (): ConstrainedMovementsSequence  => {
     let movesSequence: ConstrainedMovesSequence;
     for(let j = 0; j < movementsSequence.moves.length; j++) {
       movesSequence = <ConstrainedMovesSequence>movementsSequence.moves[j];
-      movesSequence.values[i] = stepsPerTurn * factor;
-      movesSequence.speedLimits[i] = CONFIG.steppers[j].speedLimit;
-      movesSequence.accelerationLimits[i] = CONFIG.steppers[j].accelerationLimit;
-      movesSequence.jerkLimits[i] = CONFIG.steppers[j].jerkLimit;
+      movesSequence._buffers.values[i] = stepsPerTurn * factor;
+      movesSequence._buffers.speedLimits[i] = CONFIG.steppers[j].speedLimit;
+      movesSequence._buffers.accelerationLimits[i] = CONFIG.steppers[j].accelerationLimit;
+      movesSequence._buffers.jerkLimits[i] = CONFIG.steppers[j].jerkLimit;
     }
   }
 
@@ -425,10 +444,10 @@ let buildCircleMovementsSequence = (): ConstrainedMovementsSequence  => {
     let movesSequence: ConstrainedMovesSequence;
     for(let j = 0; j < movementsSequence.moves.length; j++) {
       movesSequence = <ConstrainedMovesSequence>movementsSequence.moves[j];
-      movesSequence.values[i] = radius * ((j === 0) ? (Math.cos(a1) - Math.cos(a0)) : (Math.sin(a1) - Math.sin(a0)));
-      movesSequence.speedLimits[i] = CONFIG.steppers[j].speedLimit;
-      movesSequence.accelerationLimits[i] = CONFIG.steppers[j].accelerationLimit;
-      movesSequence.jerkLimits[i] = CONFIG.steppers[j].jerkLimit;
+      movesSequence._buffers.values[i] = radius * ((j === 0) ? (Math.cos(a1) - Math.cos(a0)) : (Math.sin(a1) - Math.sin(a0)));
+      movesSequence._buffers.speedLimits[i] = CONFIG.steppers[j].speedLimit;
+      movesSequence._buffers.accelerationLimits[i] = CONFIG.steppers[j].accelerationLimit;
+      movesSequence._buffers.jerkLimits[i] = CONFIG.steppers[j].jerkLimit;
     }
   }
 
@@ -442,9 +461,9 @@ let getSomeData = ():Promise<ConstrainedMovementsSequence> => {
   //   resolve(buildLinearMovementsSequence());
   // });
 
-  return new Promise((resolve: any, reject: any) => {
-    resolve(buildCircleMovementsSequence());
-  });
+  // return new Promise((resolve: any, reject: any) => {
+  //   resolve(buildCircleMovementsSequence());
+  // });
 
   // return new Promise((resolve: any, reject: any) => {
   //   let movements = new ConstrainedMovementsSequence(2);
@@ -460,7 +479,7 @@ let getSomeData = ():Promise<ConstrainedMovementsSequence> => {
   // });
 
 
-  // return CNCController.parseFile('../assets/' + 'thin_tower' + '.gcode', CONFIG);
+  return CNCController.parseFile('../assets/' + 'thin_tower' + '.gcode', CONFIG);
   // return CNCController.parseFile('../assets/' + 'fruit_200mm' + '.gcode', CONFIG);
 
   // return new Promise((resolve: any, reject: any) => {
@@ -514,18 +533,20 @@ let start = () => {
     let optimizedMovementsSequence = movementsSequence.optimize();
     timer.disp('optimized in', 'ms');
 
+    // console.log(optimizedMovementsSequence._buffers.indices.subarray(0, 30));
+
     // optimizedMovementsSequence.compact();
 
     let time = 0, x = 0, y = 0;
-    for(let i = 0, length = optimizedMovementsSequence.times.length; i < length; i++) {
-      time += optimizedMovementsSequence.times[i];
-      x += optimizedMovementsSequence.moves[0][i];
-      y += optimizedMovementsSequence.moves[1][i];
+    for(let i = 0, length = optimizedMovementsSequence._buffers.times.length; i < length; i++) {
+      time += optimizedMovementsSequence._buffers.times[i];
+      x += optimizedMovementsSequence.moves[0]._buffers.values[i];
+      y += optimizedMovementsSequence.moves[1]._buffers.values[i];
     }
 
     // console.log(optimizedMovementsSequence.toString());
     // console.log(optimizedMovementsSequence.toString(-1, 'times'));
-    console.log(optimizedMovementsSequence.length, 't', time, 'x', x, 'y', y);
+    console.log('length', optimizedMovementsSequence.length, 'time', time, 'x', x, 'y', y);
     // console.log(optimizedMovementsSequence.times);
 
     timer.clear();
@@ -539,8 +560,8 @@ let start = () => {
     // console.log(stepperMovementsSequence.toString());
     // console.log(stepperMovementsSequence.times);
 
-    let controller = new CNCController(CONFIG);
-    controller.run(stepperMovementsSequence);
+    // let controller = new CNCController(CONFIG);
+    // controller.run(stepperMovementsSequence);
 
     // console.log(movementsSequence.toString(-1, 'speeds'));
   });

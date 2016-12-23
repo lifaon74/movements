@@ -1,7 +1,7 @@
 import { Matrix } from './matrix.class';
 import { Float } from './float.class';
 
-export abstract class DynamicSequence {
+export class DynamicSequence {
 
   static sliceTypedArray(typedArray: any, start: number, end: number, copy: boolean = true) {
     if((start < 0) || (end > typedArray.length)) {
@@ -12,14 +12,19 @@ export abstract class DynamicSequence {
       return copy ? typedArray.slice(start, end) : typedArray.subarray(start, end);
     }
   }
-
-  public allocated: number;
+  
+  public _buffers: any;
+  public _allocated: number;
   public _length: number;
 
+  constructor(allocated: number = 0, buffers: any[][] = []) {
+    this._buffers  = {};
+    this._allocated   = allocated;
+    this._length      = 0;
 
-  constructor(size: number = 0) {
-    this._length = 0;
-    this.allocated = size;
+    for(let i = 0; i < buffers.length; i++) {
+      this.createBuffer(buffers[i][0], new (buffers[i][1])(this._allocated));
+    }
   }
 
   get length(): number {
@@ -31,16 +36,35 @@ export abstract class DynamicSequence {
     this.require(length);
   }
 
+  get allocated() {
+    return this._allocated;
+  }
+
+  createBuffer(name: string, typedArray: any): this {
+    // this._buffers[name] = typedArray;
+    Object.defineProperty(this._buffers, name, {
+      value : typedArray,
+      writable : true,
+      enumerable : true,
+      configurable : false
+    });
+    return this;
+  }
+
+  getBuffer(name: string): any {
+    return this._buffers[name];
+  }
+
 
   require(size: number): this {
-    if(this.allocated < size) {
+    if(this._allocated < size) {
       this.allocate(size);
     }
     return this;
   }
 
   allocate(size: number): this {
-    this.allocated = size;
+    this._allocated = size;
     this.transferBuffers();
     return this;
   }
@@ -50,52 +74,81 @@ export abstract class DynamicSequence {
     return this;
   }
 
-  abstract move(index_0: number, index_1: number): void;
+  move(index_0: number, index_1: number): this {
+    let bufferNames: string[] = Object.keys(this._buffers);
+    let buffer: any;
+    for(let i = 0; i < bufferNames.length; i++) {
+      buffer = this._buffers[bufferNames[i]];
+      buffer[index_0] = buffer[index_1];
+    }
+    return this;
+  }
 
-  protected abstract transferBuffers(): void;
+  protected transferBuffers() {
+    let bufferNames: string[] = Object.keys(this._buffers);
+    let bufferName: string;
+    for(let i = 0; i < bufferNames.length; i++) {
+      bufferName = bufferNames[i];
+      this._buffers[bufferName] = DynamicSequence.sliceTypedArray(this._buffers[bufferName], 0, this._allocated, false)
+    }
+  }
 }
 
-
-
-export abstract class DynamicSequenceCollection {
+export class DynamicSequenceCollection extends DynamicSequence {
   moves: DynamicSequence[] = [];
 
-  constructor() {
+  constructor(allocated?: number, buffers?: any[][]) {
+    super(allocated, buffers);
   }
 
   get length(): number {
-    return this.moves[0].length;
+    return this._length;
   }
 
   set length(length: number) {
+    this._length = length;
     for(let i = 0; i < this.moves.length; i++) {
       this.moves[i].length = length;
     }
+    this.require(length);
   }
 
-  get allocated(): number {
-    return this.moves[0].allocated;
-  }
-
-  require(size: number) {
+  require(size: number): this {
     for(let i = 0; i < this.moves.length; i++) {
       this.moves[i].require(size);
     }
+    super.require(size);
+    return this;
   }
 
-  allocate(size: number) {
+  allocate(size: number): this {
     for(let i = 0; i < this.moves.length; i++) {
       this.moves[i].allocate(size);
     }
+    super.allocate(size);
+    return this;
   }
 
-  compact() {
+  compact(): this {
     for(let i = 0; i < this.moves.length; i++) {
       this.moves[i].compact();
     }
+    super.compact();
+    return this;
+  }
+
+  // Move the movement at index_1 into the movement at index_0
+  move(index_0: number, index_1: number): this {
+    for(let i = 0; i < this.moves.length; i++) {
+      (<DynamicSequence>this.moves[i]).move(index_0, index_1);
+    }
+    super.move(index_0, index_1);
+    return this;
   }
 
 }
+
+
 
 
 
@@ -104,50 +157,13 @@ export abstract class DynamicSequenceCollection {
  */
 export class ConstrainedMovesSequence extends DynamicSequence {
 
-  public values: Float64Array;
-  public speedLimits: Float64Array;
-  public accelerationLimits: Float64Array;
-  public jerkLimits: Float64Array;
-
-  constructor(size?: number) {
-    super(size);
-
-    this.values             = new Float64Array(this.allocated);
-    this.speedLimits        = new Float64Array(this.allocated);
-    this.accelerationLimits = new Float64Array(this.allocated);
-    this.jerkLimits         = new Float64Array(this.allocated);
-  }
-
-  clone() {
-    let movesSequence = new ConstrainedMovesSequence();
-
-    movesSequence.values             = new Float64Array(this.values);
-    movesSequence.speedLimits        = new Float64Array(this.speedLimits);
-    movesSequence.accelerationLimits = new Float64Array(this.accelerationLimits);
-    movesSequence.jerkLimits         = new Float64Array(this.jerkLimits);
-
-    movesSequence._length = this._length;
-    movesSequence.allocated = this.values.length;
-
-    return movesSequence;
-  }
-
-
-  /**
-   * INHERIT
-   */
-  move(index_0: number, index_1: number) {
-    this.values[index_0]              = this.values[index_1];
-    this.speedLimits[index_0]         = this.speedLimits[index_1];
-    this.accelerationLimits[index_0]  = this.accelerationLimits[index_1];
-    this.jerkLimits[index_0]          = this.jerkLimits[index_1];
-  }
-
-  protected transferBuffers() {
-    this.values             = DynamicSequence.sliceTypedArray(this.values, 0, this.allocated, false);
-    this.speedLimits        = DynamicSequence.sliceTypedArray(this.speedLimits, 0, this.allocated, false);
-    this.accelerationLimits = DynamicSequence.sliceTypedArray(this.accelerationLimits, 0, this.allocated, false);
-    this.jerkLimits         = DynamicSequence.sliceTypedArray(this.jerkLimits, 0, this.allocated, false);
+  constructor(allocated?: number) {
+    super(allocated, [
+      ['values', Float64Array],
+      ['speedLimits', Float64Array],
+      ['accelerationLimits', Float64Array],
+      ['jerkLimits', Float64Array]
+    ]);
   }
 
   /**
@@ -163,10 +179,10 @@ export class ConstrainedMovesSequence extends DynamicSequence {
     } else {
       switch(type) {
         case 'limits':
-          return '( ' + this.speedLimits[index] + ', ' + this.accelerationLimits[index] + ', ' + this.jerkLimits[index] + ' )';
+          return '( ' + this._buffers.speedLimits[index] + ', ' + this._buffers.accelerationLimits[index] + ', ' + this._buffers.jerkLimits[index] + ' )';
         case 'value':
         default:
-          return this.values[index].toString();
+          return this._buffers.values[index].toString();
       }
     }
   }
@@ -180,35 +196,13 @@ export class ConstrainedMovesSequence extends DynamicSequence {
  */
 export class ConstrainedNormalizedMovesSequence extends DynamicSequence {
 
-  public initialSpeeds: Float64Array;
-  public finalSpeeds: Float64Array;
-  public speedLimits: Float64Array;
-  public accelerationLimits: Float64Array;
-
   constructor(allocated?: number) {
-    super(allocated);
-
-    this.initialSpeeds      = new Float64Array(this.allocated);
-    this.finalSpeeds        = new Float64Array(this.allocated);
-    this.speedLimits        = new Float64Array(this.allocated);
-    this.accelerationLimits = new Float64Array(this.allocated);
-  }
-
-  /**
-   * INHERIT
-   */
-  move(index_0: number, index_1: number) {
-    this.initialSpeeds[index_0]       = this.initialSpeeds[index_1];
-    this.finalSpeeds[index_0]         = this.finalSpeeds[index_1];
-    this.speedLimits[index_0]         = this.speedLimits[index_1];
-    this.accelerationLimits[index_0]  = this.accelerationLimits[index_1];
-  }
-
-  protected transferBuffers() {
-    this.initialSpeeds      = DynamicSequence.sliceTypedArray(this.initialSpeeds, 0, this.allocated, false);
-    this.finalSpeeds        = DynamicSequence.sliceTypedArray(this.finalSpeeds, 0, this.allocated, false);
-    this.speedLimits        = DynamicSequence.sliceTypedArray(this.speedLimits, 0, this.allocated, false);
-    this.accelerationLimits = DynamicSequence.sliceTypedArray(this.accelerationLimits, 0, this.allocated, false);
+    super(allocated, [
+      ['initialSpeeds', Float64Array],
+      ['finalSpeeds', Float64Array],
+      ['speedLimits', Float64Array],
+      ['accelerationLimits', Float64Array],
+    ]);
   }
 
   /**
@@ -224,10 +218,10 @@ export class ConstrainedNormalizedMovesSequence extends DynamicSequence {
     } else {
       switch(type) {
         case 'limits':
-          return '( ' + this.speedLimits[index] + ', ' + this.accelerationLimits[index] + ' )';
+          return '( ' + this._buffers.speedLimits[index] + ', ' + this._buffers.accelerationLimits[index] + ' )';
         case 'speed':
         default:
-          return '( ' + this.initialSpeeds[index] + ', ' + this.finalSpeeds[index] + ' )';
+          return '( ' + this._buffers.initialSpeeds[index] + ', ' + this._buffers.finalSpeeds[index] + ' )';
       }
     }
   }
@@ -243,7 +237,9 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
   static DEFAULT_PRECISION = Float.EPSILON_32;
 
   constructor(numberOfParallelMoves: number) {
-    super();
+    super(0, [
+      ['indices', Uint32Array]
+    ]);
 
     for(let i = 0; i < numberOfParallelMoves; i++) {
       this.moves[i] = new ConstrainedMovesSequence();
@@ -292,27 +288,27 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
   }
 
     private _getNormalizedMovesSequence(): ConstrainedNormalizedMovesSequence {
-      let movesSequence = new ConstrainedNormalizedMovesSequence();
+      let movesSequence: ConstrainedNormalizedMovesSequence = new ConstrainedNormalizedMovesSequence();
       movesSequence.length = this.length;
 
       let move: ConstrainedMovesSequence;
       let speedLimit: number, accelerationLimit: number, value: number;
       for(let i = 0, length = this.length; i < length; i++) {
         move = <ConstrainedMovesSequence>this.moves[0];
-        value = Math.abs(move.values[i]);
-        speedLimit = move.speedLimits[i] / value;
-        accelerationLimit = move.accelerationLimits[i] / value;
+        value = Math.abs(move._buffers.values[i]);
+        speedLimit = move._buffers.speedLimits[i] / value;
+        accelerationLimit = move._buffers.accelerationLimits[i] / value;
         for(let j = 1; j < this.moves.length; j++) {
           move = <ConstrainedMovesSequence>this.moves[j];
-          value = Math.abs(move.values[i]);
-          speedLimit = Math.min(speedLimit, move.speedLimits[i] / value);
-          accelerationLimit = Math.min(accelerationLimit, move.accelerationLimits[i] / value);
+          value = Math.abs(move._buffers.values[i]);
+          speedLimit = Math.min(speedLimit, move._buffers.speedLimits[i] / value);
+          accelerationLimit = Math.min(accelerationLimit, move._buffers.accelerationLimits[i] / value);
         }
 
         // movesSequence.initialSpeeds[i]       = NaN;
         // movesSequence.finalSpeeds[i]         = NaN;
-        movesSequence.speedLimits[i]         = speedLimit;
-        movesSequence.accelerationLimits[i]  = accelerationLimit;
+        movesSequence._buffers.speedLimits[i]         = speedLimit;
+        movesSequence._buffers.accelerationLimits[i]  = accelerationLimit;
       }
 
       return movesSequence;
@@ -326,14 +322,14 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
       let matrix: Matrix;
       let solutions: Matrix;
       let i: number = 0;
-      normalizedMovesSequence.initialSpeeds[i] = 0;
+      normalizedMovesSequence._buffers.initialSpeeds[i] = 0;
       for(let length = normalizedMovesSequence.length - 1; i < length; i++) {
-        initialSpeed = normalizedMovesSequence.initialSpeeds[i];
-        accelerationLimit = normalizedMovesSequence.accelerationLimits[i];
+        initialSpeed = normalizedMovesSequence._buffers.initialSpeeds[i];
+        accelerationLimit = normalizedMovesSequence._buffers.accelerationLimits[i];
 
         // compute final speed limit according to accelerationLimit and speedLimit
         finalSpeedLimit = Math.min(
-          normalizedMovesSequence.speedLimits[i],
+          normalizedMovesSequence._buffers.speedLimits[i],
           (accelerationLimit === 0) ?
             initialSpeed : Math.sqrt(initialSpeed * initialSpeed + 2 * accelerationLimit)
         );
@@ -341,13 +337,13 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
         // build the maximization matrix
         matrix = this._getMaximizationMatrix(
           i, i + 1,
-          finalSpeedLimit, Math.min(finalSpeedLimit, normalizedMovesSequence.speedLimits[i + 1])
+          finalSpeedLimit, Math.min(finalSpeedLimit, normalizedMovesSequence._buffers.speedLimits[i + 1])
         );
         // get max final and initial speeds
         solutions = Matrix.getStandardMaximizationProblemSolutions(matrix.solveStandardMaximizationProblem());
 
-        normalizedMovesSequence.finalSpeeds[i]        = solutions.values[0];
-        normalizedMovesSequence.initialSpeeds[i + 1]  = solutions.values[1];
+        normalizedMovesSequence._buffers.finalSpeeds[i]        = solutions.values[0];
+        normalizedMovesSequence._buffers.initialSpeeds[i + 1]  = solutions.values[1];
       }
     }
 
@@ -359,15 +355,15 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
       let matrix: Matrix;
       let solutions: Matrix;
       let i: number = normalizedMovesSequence.length - 1;
-      normalizedMovesSequence.finalSpeeds[i] = 0;
+      normalizedMovesSequence._buffers.finalSpeeds[i] = 0;
       for(; i > 0; i--) {
-        finalSpeed = normalizedMovesSequence.finalSpeeds[i];
-        accelerationLimit = normalizedMovesSequence.accelerationLimits[i];
+        finalSpeed = normalizedMovesSequence._buffers.finalSpeeds[i];
+        accelerationLimit = normalizedMovesSequence._buffers.accelerationLimits[i];
 
         // compute initial speed limit according to accelerationLimit and speedLimit
         initialSpeedLimit = Math.min(
-          normalizedMovesSequence.speedLimits[i],
-          normalizedMovesSequence.initialSpeeds[i],
+          normalizedMovesSequence._buffers.speedLimits[i],
+          normalizedMovesSequence._buffers.initialSpeeds[i],
           (accelerationLimit === 0) ?
             finalSpeed : Math.sqrt(finalSpeed * finalSpeed + 2 * accelerationLimit)
         );
@@ -375,13 +371,13 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
         // build the maximization matrix
         matrix = this._getMaximizationMatrix(
           i - 1, i,
-          Math.min(initialSpeedLimit, normalizedMovesSequence.finalSpeeds[i - 1]), initialSpeedLimit,
+          Math.min(initialSpeedLimit, normalizedMovesSequence._buffers.finalSpeeds[i - 1]), initialSpeedLimit,
         );
         // get max final and initial speeds
         solutions = Matrix.getStandardMaximizationProblemSolutions(matrix.solveStandardMaximizationProblem());
 
-        normalizedMovesSequence.finalSpeeds[i - 1]  = solutions.values[0];
-        normalizedMovesSequence.initialSpeeds[i]    = solutions.values[1];
+        normalizedMovesSequence._buffers.finalSpeeds[i - 1]  = solutions.values[0];
+        normalizedMovesSequence._buffers.initialSpeeds[i]    = solutions.values[1];
       }
     }
 
@@ -405,10 +401,10 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
       for(let i = 0; i < this.moves.length; i++) {
         movesSequence = <ConstrainedMovesSequence>this.moves[i];
 
-        jerkLimit = Math.min(movesSequence.jerkLimits[index_0], movesSequence.jerkLimits[index_1]); //  * move_0.direction  * move_1.direction
+        jerkLimit = Math.min(movesSequence._buffers.jerkLimits[index_0], movesSequence._buffers.jerkLimits[index_1]); //  * move_0.direction  * move_1.direction
 
-        value_0 = movesSequence.values[index_0];
-        value_1 = movesSequence.values[index_1];
+        value_0 = movesSequence._buffers.values[index_0];
+        value_1 = movesSequence._buffers.values[index_1];
 
         matrix.values[row] = value_0;
         matrix.values[row + col_1] = -value_1;
@@ -446,6 +442,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
       movementsSequence.require(normalizedMovesSequence.length * 3);
       let movementsSequenceLength: number = 0;
 
+      let index: number;
       let initialSpeed: number, finalSpeed: number;
       let speedLimit: number, accelerationLimit: number;
 
@@ -455,11 +452,12 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 
 
       for(let i = 0, length = normalizedMovesSequence.length; i < length; i++) {
+        index = this._buffers.indices[i];
 
-        initialSpeed = normalizedMovesSequence.initialSpeeds[i];
-        finalSpeed = normalizedMovesSequence.finalSpeeds[i];
-        speedLimit = normalizedMovesSequence.speedLimits[i];
-        accelerationLimit = normalizedMovesSequence.accelerationLimits[i];
+        initialSpeed = normalizedMovesSequence._buffers.initialSpeeds[i];
+        finalSpeed = normalizedMovesSequence._buffers.finalSpeeds[i];
+        speedLimit = normalizedMovesSequence._buffers.speedLimits[i];
+        accelerationLimit = normalizedMovesSequence._buffers.accelerationLimits[i];
 
         // ta, tb => time to reach junction peak of full acceleration and deceleration
         // ta for acceleration, tb for deceleration
@@ -494,12 +492,13 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
         if(!Float.isNull(t0, precision)) {
           // console.log('i', i, 'vi', initialSpeed, 'vf', finalSpeed, 'al', accelerationLimit);
 
-          movementsSequence.times[movementsSequenceLength] = t0;
-          movementsSequence.initialSpeeds[movementsSequenceLength] = initialSpeed / d0;
-          movementsSequence.accelerations[movementsSequenceLength] = accelerationLimit / d0;
+          movementsSequence._buffers.indices[movementsSequenceLength] = index;
+          movementsSequence._buffers.times[movementsSequenceLength] = t0;
+          movementsSequence._buffers.initialSpeeds[movementsSequenceLength] = initialSpeed / d0;
+          movementsSequence._buffers.accelerations[movementsSequenceLength] = accelerationLimit / d0;
 
           for(let j = 0; j < this.moves.length; j++) {
-            movementsSequence.moves[j][movementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d0;
+            movementsSequence.moves[j]._buffers.values[movementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j])._buffers.values[i] * d0;
           }
 
           movementsSequenceLength++;
@@ -507,12 +506,13 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 
         // linear
         if(!Float.isNull(t1, precision)) {
-          movementsSequence.times[movementsSequenceLength] = t1;
-          movementsSequence.initialSpeeds[movementsSequenceLength] = v0_max / d1;
+          movementsSequence._buffers.indices[movementsSequenceLength] = index;
+          movementsSequence._buffers.times[movementsSequenceLength] = t1;
+          movementsSequence._buffers.initialSpeeds[movementsSequenceLength] = v0_max / d1;
           // movementsSequence.accelerations[movementsSequenceLength] = 0;
 
           for(let j = 0; j < this.moves.length; j++) {
-            movementsSequence.moves[j][movementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d1;
+            movementsSequence.moves[j]._buffers.values[movementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j])._buffers.values[i] * d1;
           }
 
           movementsSequenceLength++;
@@ -520,12 +520,13 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 
         // // deceleration
         if(!Float.isNull(t2, precision)) {
-          movementsSequence.times[movementsSequenceLength] = t2;
-          movementsSequence.initialSpeeds[movementsSequenceLength] = v0_max / d2;
-          movementsSequence.accelerations[movementsSequenceLength] = -normalizedMovesSequence.accelerationLimits[i] / d2;
+          movementsSequence._buffers.indices[movementsSequenceLength] = index;
+          movementsSequence._buffers.times[movementsSequenceLength] = t2;
+          movementsSequence._buffers.initialSpeeds[movementsSequenceLength] = v0_max / d2;
+          movementsSequence._buffers.accelerations[movementsSequenceLength] = -normalizedMovesSequence._buffers.accelerationLimits[i] / d2;
 
           for(let j = 0; j < this.moves.length; j++) {
-            movementsSequence.moves[j][movementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j]).values[i] * d2;
+            movementsSequence.moves[j]._buffers.values[movementsSequenceLength] = (<ConstrainedMovesSequence>this.moves[j])._buffers.values[i] * d2;
           }
 
           movementsSequenceLength++;
@@ -533,20 +534,12 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 
       }
 
-
       movementsSequence.length = movementsSequenceLength;
       // console.log(movementsSequence.toString());
 
       return movementsSequence;
     }
 
-
-  // Move the movement at index_1 into the movement at index_0
-  move(index_0: number, index_1: number) {
-    for(let i = 0; i < this.moves.length; i++) {
-      (<ConstrainedMovesSequence>this.moves[i]).move(index_0, index_1);
-    }
-  }
 
 
   /**
@@ -572,8 +565,8 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
       let movesSequence: ConstrainedMovesSequence;
       for(let i = 0; i < this.moves.length; i++) {
         movesSequence = <ConstrainedMovesSequence>this.moves[i];
-        movesSequence.values[index_0] += movesSequence.values[index_1];
-        movesSequence.values[index_1] = 0;
+        movesSequence._buffers.values[index_0] += movesSequence._buffers.values[index_1];
+        movesSequence._buffers.values[index_1] = 0;
       }
       return true;
     }
@@ -585,7 +578,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 
   isNull(index: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
     for(let i = 0; i < this.moves.length; i++) {
-      if(!Float.isNull((<ConstrainedMovesSequence>this.moves[i]).values[index], precision)) {
+      if(!Float.isNull((<ConstrainedMovesSequence>this.moves[i])._buffers.values[index], precision)) {
         return false;
       }
     }
@@ -594,13 +587,13 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 
   areCollinear(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
     let movesSequence: ConstrainedMovesSequence = <ConstrainedMovesSequence>this.moves[0];
-    let value_0: number  = movesSequence.values[index_0];
-    let value_1: number = movesSequence.values[index_1];
+    let value_0: number  = movesSequence._buffers.values[index_0];
+    let value_1: number = movesSequence._buffers.values[index_1];
     let factor: number = value_0 / value_1;
     for(let i = 1; i < this.moves.length; i++) {
       movesSequence = <ConstrainedMovesSequence>this.moves[i];
-      value_0 = movesSequence.values[index_0];
-      value_1 = movesSequence.values[index_1];
+      value_0 = movesSequence._buffers.values[index_0];
+      value_1 = movesSequence._buffers.values[index_1];
       if(
         (Math.sign(value_0) !== Math.sign(value_1)) ||
         !Float.equals(factor, value_0 / value_1, precision)
@@ -620,9 +613,9 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
     for(let i = 0; i < this.moves.length; i++) {
       movesSequence = <ConstrainedMovesSequence>this.moves[i];
       if(
-        !Float.equals(movesSequence.speedLimits[index_0], movesSequence.speedLimits[index_1], precision) ||
-        !Float.equals(movesSequence.accelerationLimits[index_0], movesSequence.accelerationLimits[index_1], precision) ||
-        !Float.equals(movesSequence.jerkLimits[index_0], movesSequence.jerkLimits[index_1], precision)
+        !Float.equals(movesSequence._buffers.speedLimits[index_0], movesSequence._buffers.speedLimits[index_1], precision) ||
+        !Float.equals(movesSequence._buffers.accelerationLimits[index_0], movesSequence._buffers.accelerationLimits[index_1], precision) ||
+        !Float.equals(movesSequence._buffers.jerkLimits[index_0], movesSequence._buffers.jerkLimits[index_1], precision)
       ) {
         return false;
       }
@@ -656,23 +649,27 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 }
 
 
-export class OptimizedMovementsSequence extends DynamicSequence {
 
-  public times: Float64Array;
-  public initialSpeeds: Float64Array;
-  public accelerations: Float64Array;
+export class OptimizedMovesSequence extends DynamicSequence {
+  constructor(allocated?: number) {
+    super(allocated, [
+      ['values', Float64Array]
+    ]);
+  }
+}
 
-  public moves: Float64Array[] = [];
+export class OptimizedMovementsSequence extends DynamicSequenceCollection {
 
   constructor(numberOfParallelMoves: number) {
-    super();
-
-    this.times          = new Float64Array(this.allocated);
-    this.initialSpeeds  = new Float64Array(this.allocated);
-    this.accelerations  = new Float64Array(this.allocated);
+    super(0, [
+      ['indices', Uint32Array],
+      ['times', Float64Array],
+      ['initialSpeeds', Float64Array],
+      ['accelerations', Float64Array]
+    ]);
 
     for(let i = 0; i < numberOfParallelMoves; i++) {
-      this.moves[i] = new Float64Array(this.allocated);
+      this.moves[i] = new OptimizedMovesSequence();
     }
   }
 
@@ -688,7 +685,7 @@ export class OptimizedMovementsSequence extends DynamicSequence {
 
 
     for(let i = 0; i < this.moves.length; i++) {
-      values  = this.moves[i];
+      values  = this.moves[i]._buffers.values;
       move    = movementsSequence.moves[i];
       position = 0;
       roundedPosition = 0;
@@ -697,39 +694,20 @@ export class OptimizedMovementsSequence extends DynamicSequence {
         position += values[j];
         delta = Math.round(position - roundedPosition);
         roundedPosition += delta;
-        move.values[j] = delta;
+        move._buffers.values[j] = delta;
       }
     }
 
     for(let i = 0; i < this._length; i++) {
-      movementsSequence.times[i] = this.times[i];
-      movementsSequence.initialSpeeds[i] = this.initialSpeeds[i];
-      movementsSequence.accelerations[i] = this.accelerations[i];
+      movementsSequence._buffers.times[i] = this._buffers.times[i];
+      movementsSequence._buffers.initialSpeeds[i] = this._buffers.initialSpeeds[i];
+      movementsSequence._buffers.accelerations[i] = this._buffers.accelerations[i];
     }
 
 
     return movementsSequence;
   }
 
-
-  /**
-   * INHERIT
-   */
-  move(index_0: number, index_1: number) {
-    this.times[index_0]         = this.times[index_1];
-    this.initialSpeeds[index_0] = this.initialSpeeds[index_1];
-    this.accelerations[index_0] = this.accelerations[index_1];
-  }
-
-  protected transferBuffers() {
-    this.times          = DynamicSequence.sliceTypedArray(this.times, 0, this.allocated, false);
-    this.initialSpeeds  = DynamicSequence.sliceTypedArray(this.initialSpeeds, 0, this.allocated, false);
-    this.accelerations  = DynamicSequence.sliceTypedArray(this.accelerations, 0, this.allocated, false);
-
-    for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i] = DynamicSequence.sliceTypedArray(this.moves[i], 0, this.allocated, false);
-    }
-  }
 
   /**
    * DEBUG
@@ -744,22 +722,22 @@ export class OptimizedMovementsSequence extends DynamicSequence {
     } else {
       switch(type) {
         case 'values':
-          return 'time: ' + this.times[index] + ' => ' +
-            this.moves.map((move: Float64Array) => {
+          return 'time: ' + this._buffers.times[index] + ' => ' +
+            this.moves.map((move: OptimizedMovesSequence) => {
               // return move.toString(index);
-              let value = move[index];
+              let value = move._buffers.values[index];
               return '{ ' +
                   'value: ' + value +
-                ', speed: ' + value * this.initialSpeeds[index] +
-                ', accel: ' + value * this.accelerations[index] +
+                ', speed: ' + value * this._buffers.initialSpeeds[index] +
+                ', accel: ' + value * this._buffers.accelerations[index] +
                 ' }';
             }).join(', ');
         case 'times':
-          return 'time: ' + this.times[index] + ' => ' +
-            this.moves.map((move: Float64Array) => {
+          return 'time: ' + this._buffers.times[index] + ' => ' +
+            this.moves.map((move: OptimizedMovesSequence) => {
               // return move.toString(index);
-              let value = move[index];
-              let computed = 0.5 * this.accelerations[index] * this.times[index] * this.times[index] + this.initialSpeeds[index] * this.times[index];
+              let value = move._buffers.values[index];
+              let computed = 0.5 * this._buffers.accelerations[index] * this._buffers.times[index] * this._buffers.times[index] + this._buffers.initialSpeeds[index] * this._buffers.times[index];
               return '{ ' +
                 'value: ' + value +
                 ', computed: ' + computed * value +
@@ -775,47 +753,26 @@ export class OptimizedMovementsSequence extends DynamicSequence {
 
 
 export class StepperMovesSequence extends DynamicSequence {
-  public values: Int32Array;
-  public positions: Uint32Array;
-
-
-  constructor(size?: number) {
-    super(size);
-
-    this.values     = new Int32Array(this.allocated);
-    this.positions  = new Uint32Array(this.allocated);
-  }
-
-  /**
-   * INHERIT
-   */
-  move(index_0: number, index_1: number) {
-    this.values[index_0]    = this.values[index_1];
-    this.positions[index_0] = this.positions[index_1];
-  }
-
-  protected transferBuffers() {
-    this.values     = DynamicSequence.sliceTypedArray(this.values, 0, this.allocated, false);
-    this.positions  = DynamicSequence.sliceTypedArray(this.positions, 0, this.allocated, false);
+  constructor(allocated?: number) {
+    super(allocated, [
+      ['values', Int32Array],
+      ['positions', Uint32Array],
+    ]);
   }
 }
 
-export class StepperMovementsSequence extends DynamicSequence {
-  public times: Float64Array;
-  public initialSpeeds: Float64Array;
-  public accelerations: Float64Array;
-
+export class StepperMovementsSequence extends DynamicSequenceCollection {
   public moves: StepperMovesSequence[] = [];
 
   constructor(numberOfParallelMoves: number) {
-    super();
-
-    this.times          = new Float64Array(this.allocated);
-    this.initialSpeeds  = new Float64Array(this.allocated);
-    this.accelerations  = new Float64Array(this.allocated);
+    super(0, [
+      ['times', Float64Array],
+      ['initialSpeeds', Float64Array],
+      ['accelerations', Float64Array]
+    ]);
 
     for(let i = 0; i < numberOfParallelMoves; i++) {
-      this.moves[i] = new StepperMovesSequence(this.allocated);
+      this.moves[i] = new StepperMovesSequence(this._allocated);
     }
   }
 
@@ -832,58 +789,13 @@ export class StepperMovementsSequence extends DynamicSequence {
 
   isNull(index: number): boolean {
     for(let i = 0; i < this.moves.length; i++) {
-      if(this.moves[i].values[index] !== 0) {
+      if(this.moves[i]._buffers.values[index] !== 0) {
         return false;
       }
     }
     return true;
   }
 
-
-  /**
-   * INHERIT
-   */
-  move(index_0: number, index_1: number) {
-    this.times[index_0]         = this.times[index_1];
-    this.initialSpeeds[index_0] = this.initialSpeeds[index_1];
-    this.accelerations[index_0] = this.accelerations[index_1];
-
-    for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i].move(index_0, index_1);
-    }
-  }
-
-  get length(): number {
-    return this._length;
-  }
-
-  set length(length: number) {
-    this._length = length;
-    for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i].length = length;
-    }
-    this.require(length);
-  }
-
-  allocate(size: number): this {
-    for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i].allocate(size);
-    }
-    return super.allocate(size);
-  }
-
-  compact(): this {
-    for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i].compact();
-    }
-    return super.compact();
-  }
-
-  protected transferBuffers() {
-    this.times          = DynamicSequence.sliceTypedArray(this.times, 0, this.allocated, false);
-    this.initialSpeeds  = DynamicSequence.sliceTypedArray(this.initialSpeeds, 0, this.allocated, false);
-    this.accelerations  = DynamicSequence.sliceTypedArray(this.accelerations, 0, this.allocated, false);
-  }
 
   /**
    * DEBUG
@@ -898,22 +810,22 @@ export class StepperMovementsSequence extends DynamicSequence {
     } else {
       switch(type) {
         case 'values':
-          return 'time: ' + this.times[index] + ' => ' +
+          return 'time: ' + this._buffers.times[index] + ' => ' +
             this.moves.map((move: StepperMovesSequence) => {
               // return move.toString(index);
-              let value = move.values[index];
+              let value = move._buffers.values[index];
               return '{ ' +
                 'value: ' + value +
-                ', speed: ' + value * this.initialSpeeds[index] +
-                ', accel: ' + value * this.accelerations[index] +
+                ', speed: ' + value * this._buffers.initialSpeeds[index] +
+                ', accel: ' + value * this._buffers.accelerations[index] +
                 ' }';
             }).join(', ');
         case 'times':
-          return 'time: ' + this.times[index] + ' => ' +
+          return 'time: ' + this._buffers.times[index] + ' => ' +
             this.moves.map((move: StepperMovesSequence) => {
               // return move.toString(index);
-              let value = move.values[index];
-              let computed = 0.5 * this.accelerations[index] * this.times[index] * this.times[index] + this.initialSpeeds[index] * this.times[index];
+              let value = move._buffers.values[index];
+              let computed = 0.5 * this._buffers.accelerations[index] * this._buffers.times[index] * this._buffers.times[index] + this._buffers.initialSpeeds[index] * this._buffers.times[index];
               return '{ ' +
                 'value: ' + value +
                 ', computed: ' + computed * value +
