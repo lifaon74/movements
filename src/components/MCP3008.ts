@@ -1,5 +1,4 @@
 import * as rpio from 'rpio';
-import * as SPI from 'spi';
 
 
 /**
