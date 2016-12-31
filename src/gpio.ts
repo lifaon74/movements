@@ -49,42 +49,42 @@ let driverTest = () => {
   console.log('enter');
   SPIController.initSPI();
   let spi = new SPIController(7);
-  spi.initBuffers(0);
+  spi.initBuffers(3);
 
   let dir: number = 0b00000000;
+  let stepping: boolean = false;
   let value: number = 0;
+
+  // spi.outBuffer => dir, steps, enable (active low)
   let time = process.hrtime();
   let loop = () => {
-    value++;
-    if(value >= 6400) {
-      let t = process.hrtime(time);
-      value = 0;
-      dir = dir ? 0b00000000 : 0b11111111;
-      console.log(t[0] * 1e6 + t[1] / 1e3 );
-      time = process.hrtime();
+    if(stepping) {
+      spi.outBuffer[1] = 0b00000000;
+      stepping = false;
+      spi.flush();
+    } else {
+      value++;
+      if(value >= 3200) {
+        let t = process.hrtime(time);
+        value = 0;
+        dir = dir ? 0b00000000 : 0b11111111;
+        let elapsed = t[0] * 1e6 + t[1] / 1e3;
+        console.log(elapsed / 3200);
+        time = process.hrtime();
+      }
+
+      spi.outBuffer[0] = dir;
+      spi.outBuffer[1] = 0b11111111;
+      stepping = true;
+
+      spi.flush();
     }
 
-    spi.outBuffer = new Buffer([
-      dir,
-      0b00001111, // steps
-      0b00000000  // enable // active low
-    ]);
-
-    spi.flush();
-    rpio.usleep(25);
-
-    spi.outBuffer = new Buffer([
-      dir,
-      0b00000000, // steps
-      0b00000000
-    ]);
-    spi.flush();
-    rpio.usleep(25);
-
+    rpio.usleep(10);
     process.nextTick(loop);
   };
 
-  loop();
+  process.nextTick(loop);
 
 };
 
