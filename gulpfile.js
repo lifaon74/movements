@@ -9,8 +9,7 @@ const source = require('vinyl-source-stream');
 const tsProject = ts.createProject('tsconfig.json');
 
 const SRC_DIR = 'src';
-// const SRC_FILES = path.join(SRC_DIR, '**', '*.ts');
-const SRC_FILES = path.join(SRC_DIR, '**', 'gpio.ts');
+const SRC_FILES = path.join(SRC_DIR, '**', '*.ts');
 
 gulp.task('build.js', () => {
   return gulp.src(SRC_FILES)

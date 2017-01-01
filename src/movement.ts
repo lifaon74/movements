@@ -10,14 +10,16 @@ import { Timer } from './classes/timer.class';
 
 // let NanoTimer = require('nanotimer');
 
-
-const stepsPerTurn = 10;//6400  => /160
+const MOTOR_STEPS = 200;
+const MICROSTEPS = 16;
+const stepsPerTurn = MOTOR_STEPS * MICROSTEPS;//6400  => /160
 
 const ACCELERATION_LIMIT = stepsPerTurn / (1 / 4);
 const SPEED_LIMIT = stepsPerTurn / (1/2); // 1 turn / s | max 6.25
-const JERK_LIMIT = stepsPerTurn / (1/1);
+const JERK_LIMIT = stepsPerTurn / (16/1);
 
 const IS_BROWSER = (typeof window !== 'undefined');
+
 
 
 export class PWMController {
@@ -27,12 +29,12 @@ export class PWMController {
   }
 }
 
-interface ICONFIG {
+export interface ICONFIG {
   steppers: Stepper[],
   PWMControllers: PWMController[]
 }
 
-const CONFIG: ICONFIG = <ICONFIG>{
+export const CONFIG: ICONFIG = <ICONFIG>{
   steppers: [
     new Stepper('x', 0, 0, 1, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn), // 160
     new Stepper('y', 1, 2, 3, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn),
@@ -49,8 +51,7 @@ const CONFIG: ICONFIG = <ICONFIG>{
 class CommandsGrouper {
 }
 
-
-class CNCController {
+export class CNCController {
 
   static parseFile(path: string, config: ICONFIG): Promise<ConstrainedMovementsSequence> {
     return GCODEParser.parseFile(path).then((data: GCODECommand[]) => {
@@ -568,11 +569,11 @@ let start = () => {
 };
 
 
-if(IS_BROWSER) {
-  window.onload = start;
-} else {
-  start();
-}
+// if(IS_BROWSER) {
+//   window.onload = start;
+// } else {
+//   start();
+// }
 
 
 
