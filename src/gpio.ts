@@ -54,6 +54,9 @@ let driverTest = () => {
   SPIController.initSPI();
   let spi = new SPIController(7);
   spi.initBuffers(3);
+  spi.outBuffer[0] = 0b00000000;
+  spi.outBuffer[1] = 0b11111111;
+  spi.outBuffer[2] = 0b00000000;
 
   let dir: number = 0b00000000;
   let stepping: boolean = false;
@@ -63,7 +66,7 @@ let driverTest = () => {
   let time = process.hrtime();
   let loop = () => {
     if(stepping) {
-      spi.outBuffer[1] = 0b00000000;
+      spi.outBuffer[1] = 0b11111111;
       stepping = false;
       spi.flush();
     } else {
@@ -78,7 +81,7 @@ let driverTest = () => {
       }
 
       spi.outBuffer[0] = dir;
-      spi.outBuffer[1] = 0b11111111;
+      spi.outBuffer[1] = 0b00000000;
       stepping = true;
 
       spi.flush();
@@ -110,6 +113,10 @@ class RASPController {
     this.index  = 0;
     this.spi = new SPIController(7);
     this.spi.initBuffers(3);
+    this.spi.outBuffer[0] = 0b00000000;
+    this.spi.outBuffer[1] = 0b11111111;
+    this.spi.outBuffer[2] = 0b00000000;
+    this.spi.flush();
     this.stepping = false;
 
     this.onEndCallback = onEndCallback;
@@ -120,85 +127,88 @@ class RASPController {
   }
 
   private loop() {
-    if(this.stepping) {
-      this.spi.outBuffer[1] = 0b00000000;
-      this.stepping = false;
-      this.spi.flush();
-    } else {
-      let time = process.hrtime();
-      let currentTime: number = time[0] + time[1] / 1e9;
-      let elapsedTime: number = (currentTime - this.startTime);
+    while(true) {
+      if(this.stepping) {
+        this.spi.outBuffer[1] = 0b11111111;
+        this.stepping = false;
+        this.spi.flush();
+      } else {
+        let time = process.hrtime();
+        let currentTime: number = time[0] + time[1] / 1e9;
+        let elapsedTime: number = (currentTime - this.startTime);
 
-      let accelerationFactor: number = elapsedTime * elapsedTime * 0.5;
-      let move: StepperMovesSequence;
-      let value: number;
-      let distance: number;
-      let position: number;
-      let expectedPosition: number;
-      let deltaSteps: number;
-      let stepsByte: number = 0 | 0;
-      let directionByte: number = 0 | 0;
-      let finished: boolean = true;
+        let accelerationFactor: number = elapsedTime * elapsedTime * 0.5;
+        let move: StepperMovesSequence;
+        let value: number;
+        let distance: number;
+        let position: number;
+        let expectedPosition: number;
+        let deltaSteps: number;
+        let stepsByte: number = 0 | 0;
+        let directionByte: number = 0 | 0;
+        let finished: boolean = true;
 
 
-      for(let i = 0; i < this.stepperMovementsSequence.moves.length; i++) {
-        move      = this.stepperMovementsSequence.moves[i];
-        value     = move._buffers.values[this.index];
-        distance  = Math.abs(value);
-        position  = move._buffers.positions[this.index];
+        for(let i = 0; i < this.stepperMovementsSequence.moves.length; i++) {
+          move      = this.stepperMovementsSequence.moves[i];
+          value     = move._buffers.values[this.index];
+          distance  = Math.abs(value);
+          position  = move._buffers.positions[this.index];
 
-        if(position < distance) {
-          finished = false;
+          if(position < distance) {
+            finished = false;
 
-          if(elapsedTime > this.stepperMovementsSequence._buffers.times[this.index]) {
-            this.runOutOfTime++; // debug only
-            deltaSteps = 1;
-          } else {
-            expectedPosition = Math.floor(Math.min(1,
-                this.stepperMovementsSequence._buffers.accelerations[this.index] * accelerationFactor +
-                this.stepperMovementsSequence._buffers.initialSpeeds[this.index] * elapsedTime
-              ) * distance);
+            if(elapsedTime > this.stepperMovementsSequence._buffers.times[this.index]) {
+              this.runOutOfTime++; // debug only
+              deltaSteps = 1;
+            } else {
+              expectedPosition = Math.floor(Math.min(1,
+                  this.stepperMovementsSequence._buffers.accelerations[this.index] * accelerationFactor +
+                  this.stepperMovementsSequence._buffers.initialSpeeds[this.index] * elapsedTime
+                ) * distance);
 
-            // debug only
-            if(expectedPosition - position > 2) {
-              this.missedSteps++;
+              // debug only
+              if(expectedPosition - position > 2) {
+                this.missedSteps++;
+              }
+
+              deltaSteps = (expectedPosition - position) ? 1 : 0;
             }
-
-            deltaSteps = (expectedPosition - position) ? 1 : 0;
+          } else {
+            deltaSteps = 0;
           }
-        } else {
-          deltaSteps = 0;
+
+          move._buffers.positions[this.index] += deltaSteps;
+          stepsByte |= deltaSteps << i;
+          directionByte |= ((Math.sign(value) < 0) ? 0 : 1)  << i;
+          // console.log(steps, value, position, deltaSteps);
+
         }
 
-        move._buffers.positions[this.index] += deltaSteps;
-        stepsByte |= deltaSteps << i;
-        directionByte |= ((Math.sign(value) < 0) ? 0 : 1)  << i;
-        // console.log(steps, value, position, deltaSteps);
 
+        this.spi.outBuffer[0] = directionByte;
+        // this.spi.outBuffer[1] = 0b11111111;
+        this.spi.outBuffer[1] = stepsByte ^ 0b11111111;
+        this.stepping = true;
+
+        this.spi.flush();
+
+        if(finished) {
+          this.index++;
+          this.startTime = currentTime;
+        }
       }
 
+      if(this.index < this.stepperMovementsSequence._length) {
+        // process.nextTick(() => this.loop());
+      } else {
+        // debug only
+        console.log('missed', this.missedSteps);
+        console.log('run out of time', this.runOutOfTime);
 
-      this.spi.outBuffer[0] = directionByte;
-      // this.spi.outBuffer[1] = 0b11111111;
-      this.spi.outBuffer[1] = stepsByte;
-      this.stepping = true;
-
-      this.spi.flush();
-
-      if(finished) {
-        this.index++;
-        this.startTime = currentTime;
+        this.onEndCallback();
+        break;
       }
-    }
-
-    if(this.index < this.stepperMovementsSequence._length) {
-      process.nextTick(() => this.loop());
-    } else {
-      // debug only
-      console.log('missed', this.missedSteps);
-      console.log('run out of time', this.runOutOfTime);
-
-      this.onEndCallback();
     }
   }
 }
@@ -207,7 +217,13 @@ let moves = () => {
   let timer = new Timer();
 
   let getMovements = (): Promise<StepperMovementsSequence> => {
-    return CNCController.parseFile('../assets/' + 'thin_tower' + '.gcode', CONFIG)
+    // let file = 'thin_tower';
+    // let file = 'fruit_200mm';
+    // let file = 'foots';
+    // let file = 'CircleCalibrationSmallDetail';
+    let file = 'CalibrationBridge3';
+
+    return CNCController.parseFile('../assets/' + file + '.gcode', CONFIG)
       .then((movementsSequence: ConstrainedMovementsSequence) => {
         timer.disp('opened in', 'ms');
 
@@ -264,7 +280,6 @@ let moves = () => {
 };
 
 moves();
-
 // driverTest();
 
 

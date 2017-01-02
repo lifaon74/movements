@@ -14,9 +14,10 @@ const MOTOR_STEPS = 200;
 const MICROSTEPS = 16;
 const stepsPerTurn = MOTOR_STEPS * MICROSTEPS;//6400  => /160
 
-const ACCELERATION_LIMIT = stepsPerTurn / (1 / 4);
-const SPEED_LIMIT = stepsPerTurn / (1/2); // 1 turn / s | max 6.25
-const JERK_LIMIT = stepsPerTurn / (16/1);
+
+const ACCELERATION_LIMIT = stepsPerTurn / (1 / 16);
+const SPEED_LIMIT = stepsPerTurn / (1 / 4); // 1 turn / s | max 6.25
+const JERK_LIMIT = stepsPerTurn / (16 / 1);
 
 const IS_BROWSER = (typeof window !== 'undefined');
 
