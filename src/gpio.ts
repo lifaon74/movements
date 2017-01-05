@@ -48,6 +48,26 @@ let ADCTest = () => {
   loop();
 };
 
+let SPISpeedTest = () => {
+
+  SPIController.initSPI();
+  let spi = new SPIController(7);
+  spi.initBuffers(3);
+
+  let t1 = process.hrtime();
+  for(let i = 0; i < 1000000; i++) { // 11.47 => 2Mhz, 7 => 10Mhz, 5 => 20Mhz, 3.47 => 200Mhz
+    // div64 => 7209 vs 5234
+    // div32 => 5145 vs 3060
+    // div16 => 4032 vs 2139
+    // variable clock divider 16~256 => 4918
+    rpio.spiSetClockDivider(16);
+    spi.flush();
+    rpio.spiSetClockDivider(256);
+  }
+  let t2 = process.hrtime(t1);
+  let nano = t2[0] * 1e9 + t2[1];
+  console.log(nano / 1e6);
+};
 
 let driverTest = () => {
   console.log('enter');
@@ -279,6 +299,7 @@ let moves = () => {
   });
 };
 
+// SPISpeedTest();
 moves();
 // driverTest();
 
