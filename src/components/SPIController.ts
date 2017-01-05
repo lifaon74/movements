@@ -7,7 +7,7 @@ import * as rpio from 'rpio';
 
 export class SPIController {
 
-  static maxClockFrequency: number = 200e6; // 2Mhz
+  static maxClockFrequency: number = 2e6; // 2Mhz
 
   static getMaxSPIClockDivider(): number {
     // return Math.pow(2, Math.ceil(Math.log(400e6 / SPIController.maxClockFrequency) / Math.log(2)));

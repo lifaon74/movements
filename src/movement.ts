@@ -37,9 +37,9 @@ export interface ICONFIG {
 
 export const CONFIG: ICONFIG = <ICONFIG>{
   steppers: [
-    new Stepper('x', 0, 0, 1, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn), // 160
-    new Stepper('y', 1, 2, 3, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn),
-    new Stepper('z', 2, 4, 5, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn), // 3316.36
+    new Stepper('x', 0, 0, 1, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, stepsPerTurn / 40), // 160
+    new Stepper('y', 1, 2, 3, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, stepsPerTurn  / 40),
+    new Stepper('z', 2, 4, 5, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, (stepsPerTurn * 5.21)  / 40), // 3316.36
     new Stepper('e', 3, null, null, 1e10, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn),
   ],
   PWMControllers: [

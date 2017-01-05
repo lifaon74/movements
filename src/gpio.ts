@@ -237,11 +237,11 @@ let moves = () => {
   let timer = new Timer();
 
   let getMovements = (): Promise<StepperMovementsSequence> => {
-    // let file = 'thin_tower';
+    let file = 'thin_tower';
     // let file = 'fruit_200mm';
     // let file = 'foots';
     // let file = 'CircleCalibrationSmallDetail';
-    let file = 'CalibrationBridge3';
+    // let file = 'CalibrationBridge3';
 
     return CNCController.parseFile('../assets/' + file + '.gcode', CONFIG)
       .then((movementsSequence: ConstrainedMovementsSequence) => {
@@ -289,6 +289,7 @@ let moves = () => {
 
         // console.log(movementsSequence.toString(-1, 'speeds'));
 
+        // stepperMovementsSequence.length = 10;
         return stepperMovementsSequence;
       });
   };
