@@ -1,8 +1,9 @@
+import * as fs from 'fs';
 import { GCODEParser, GCODECommand } from './gcodeParser';
 import { Stepper } from './classes/stepper';
 import {
   ConstrainedMovementsSequence, ConstrainedMovesSequence, StepperMovementsSequence,
-  StepperMovesSequence
+  StepperMovesSequence, DynamicSequence
 } from './classes/kinematics';
 import { Timer } from './classes/timer.class';
 
@@ -559,6 +560,25 @@ let start = () => {
 
     timer.disp('converted in', 'ms');
 
+
+    let wstream = fs.createWriteStream('commands.txt');
+
+    let movesLength: number = stepperMovementsSequence.moves.length;
+    for(let i = 0, length = stepperMovementsSequence.length; i < length; i++) {
+      wstream.write('T' + stepperMovementsSequence._buffers.times[i].toString() + ' ');
+      wstream.write('S' + stepperMovementsSequence._buffers.initialSpeeds[i] + ' ');
+      wstream.write('A' + stepperMovementsSequence._buffers.accelerations[i] + ' ');
+
+      let move: DynamicSequence;
+      for(let j = 0; j < movesLength; j++) {
+        move = stepperMovementsSequence.moves[j];
+        wstream.write(CONFIG.steppers[j].name + move._buffers.values[i] + ' ');
+      }
+      wstream.write('\n');
+    }
+
+    wstream.end();
+
     // console.log(stepperMovementsSequence.toString());
     // console.log(stepperMovementsSequence.times);
 
@@ -570,11 +590,11 @@ let start = () => {
 };
 
 
-// if(IS_BROWSER) {
-//   window.onload = start;
-// } else {
-//   start();
-// }
+if(IS_BROWSER) {
+  window.onload = start;
+} else {
+  start();
+}
 
 
 

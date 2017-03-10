@@ -92,6 +92,7 @@ export class DynamicSequence {
       this._buffers[bufferName] = DynamicSequence.sliceTypedArray(this._buffers[bufferName], 0, this._allocated, false)
     }
   }
+
 }
 
 export class DynamicSequenceCollection extends DynamicSequence {
