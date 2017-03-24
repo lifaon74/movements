@@ -565,6 +565,8 @@ let start = () => {
 
     let movesLength: number = stepperMovementsSequence.moves.length;
     for(let i = 0, length = stepperMovementsSequence.length; i < length; i++) {
+      wstream.write('G0 ');
+      // wstream.write('I' + stepperMovementsSequence._buffers.indices[i] + ' ');
       wstream.write('T' + stepperMovementsSequence._buffers.times[i].toString() + ' ');
       wstream.write('S' + stepperMovementsSequence._buffers.initialSpeeds[i] + ' ');
       wstream.write('A' + stepperMovementsSequence._buffers.accelerations[i] + ' ');
@@ -572,7 +574,7 @@ let start = () => {
       let move: DynamicSequence;
       for(let j = 0; j < movesLength; j++) {
         move = stepperMovementsSequence.moves[j];
-        wstream.write(CONFIG.steppers[j].name + move._buffers.values[i] + ' ');
+        wstream.write(CONFIG.steppers[j].name.toUpperCase() + move._buffers.values[i] + ' ');
       }
       wstream.write('\n');
     }

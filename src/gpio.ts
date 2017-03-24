@@ -115,6 +115,116 @@ let driverTest = () => {
 
 };
 
+
+class IOArray {
+  public csPin: number;
+
+  public outBuffer: Buffer;
+  public inBuffer: Buffer;
+
+  constructor(csPin: number, groups: number) {
+    this.csPin      = csPin;
+    this.outBuffer  = Buffer.alloc(groups);
+    this.inBuffer   = Buffer.alloc(groups);
+    rpio.open(this.csPin, rpio.OUTPUT, rpio.HIGH);
+  }
+
+  public read(pin: number): boolean {
+    return (this.inBuffer[Math.floor(pin / this.inBuffer.length)] & (1 << (pin % this.inBuffer.length))) !== 0;
+  }
+
+  public write(pin: number, state: boolean) {
+    if(state) {
+      this.outBuffer[Math.floor(pin / this.outBuffer.length)] |= (1 << (pin % this.outBuffer.length));
+    } else {
+      this.outBuffer[Math.floor(pin / this.outBuffer.length)] &= ~(1 << (pin % this.outBuffer.length));
+    }
+  }
+
+  public update() {
+    rpio.write(this.csPin, rpio.LOW);
+    rpio.spiTransfer(this.outBuffer, this.inBuffer, this.outBuffer.length);
+    rpio.write(this.csPin, rpio.HIGH);
+  }
+}
+
+class DevBoardMOSFET {
+  public csPin: number;
+
+  public outBuffer: Buffer;
+  public inBuffer: Buffer;
+
+  constructor(csPin: number) {
+    this.csPin      = csPin;
+    this.outBuffer  = Buffer.alloc(1);
+    this.inBuffer   = Buffer.alloc(1);
+
+    rpio.open(this.csPin, rpio.OUTPUT, rpio.HIGH);
+  }
+
+  public read(pin: number): boolean {
+    return (this.outBuffer[Math.floor(pin / this.outBuffer.length)] & (1 << (pin % this.outBuffer.length))) !== 0;
+  }
+
+  public write(pin: number, state: boolean) {
+    if(state) {
+      this.outBuffer[Math.floor(pin / this.outBuffer.length)] |= (1 << (pin % this.outBuffer.length));
+    } else {
+      this.outBuffer[Math.floor(pin / this.outBuffer.length)] &= ~(1 << (pin % this.outBuffer.length));
+    }
+  }
+
+  public update() {
+    rpio.write(this.csPin, rpio.LOW);
+    rpio.spiTransfer(this.outBuffer, this.inBuffer, this.outBuffer.length);
+    rpio.write(this.csPin, rpio.HIGH);
+  }
+}
+
+class DevBoardADC {
+  public csPin: number;
+
+  public outBuffer: Buffer;
+  public inBuffer: Buffer;
+  public values: Uint16Array;
+
+  constructor(csPin: number) {
+    this.csPin      = csPin;
+    this.outBuffer  = Buffer.alloc(2);
+    this.inBuffer   = Buffer.alloc(2);
+    this.values     = new Uint16Array(8);
+
+    rpio.open(this.csPin, rpio.OUTPUT, rpio.HIGH);
+  }
+
+  public read(chanel: number): number {
+    return this.values[0];
+  }
+
+  public update() {
+    rpio.write(this.csPin, rpio.LOW);
+    rpio.spiTransfer(this.outBuffer, this.inBuffer, this.outBuffer.length);
+    rpio.write(this.csPin, rpio.HIGH);
+  }
+}
+
+
+
+
+
+class DevBoard {
+  public gpio: IOArray;
+  public adc: DevBoardADC;
+
+  constructor() {
+    this.gpio = new IOArray(10, 4);
+    this.adc = new DevBoardADC(10);
+  }
+}
+
+const devBoard = new DevBoard();
+
+
 class RASPController {
   public startTime: number;
   public stepperMovementsSequence: StepperMovementsSequence;

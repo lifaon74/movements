@@ -49,6 +49,10 @@ export class Float {
     return Math.round(number / precision) * precision;
   }
 
+  static digits(number: number, digits: number) {
+    return Float.round(number, Math.pow(10, Math.floor(Math.log10(number)) - digits + 1));
+  }
+
   static ceil(number: number, precision: number = Float.DEFAULT_PRECISION) {
     return Math.ceil(number / precision) * precision;
   }
