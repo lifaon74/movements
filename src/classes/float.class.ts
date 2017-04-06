@@ -9,6 +9,11 @@ export class Float {
   static isNaN    = Number.isNaN;
   static isFinite = Number.isFinite;
 
+  // .exec('-1.2e+3') => ["-1.2e+3", "-", "1", "2", "+", "3"]
+  // sign, integer part, fractional part, exponential sign, exponential integer
+  static regExp = /^([+-])?([\d]+)?(?:\.([\d]+))?(?:[eE]([+-])?([\d]+))?$/;
+
+
   static isNull(number: number, precision: number = Float.DEFAULT_PRECISION) {
     return Math.abs(number) < precision;
   }
@@ -55,5 +60,24 @@ export class Float {
 
   static ceil(number: number, precision: number = Float.DEFAULT_PRECISION) {
     return Math.ceil(number / precision) * precision;
+  }
+
+  static toString(number: number, precision: number = Float.DEFAULT_PRECISION) {
+    return Float.round(number, precision).toString()
+      .replace(Float.regExp, (...match: string[]) => {
+        let str = '';
+        if(match[1]) str += match[1];
+        if(match[2]) str += match[2];
+
+        let exp = Math.log10(1e-2);
+        if(exp < 0) {
+          if(match[3]) str += '.' + match[3].slice(0, -exp);
+        }
+
+        if(match[4]) str += 'e' + match[4];
+        if(match[5]) str += match[5];
+
+        return str;
+      });
   }
 }

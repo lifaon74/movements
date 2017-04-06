@@ -1,11 +1,13 @@
 import * as fs from 'fs';
-import { GCODEParser, GCODECommand } from './gcodeParser';
+import { GCODEHelper, GCODECommand } from './gcodeHelper';
 import { Stepper } from './classes/stepper';
 import {
   ConstrainedMovementsSequence, ConstrainedMovesSequence, StepperMovementsSequence,
   StepperMovesSequence, DynamicSequence
 } from './classes/kinematics';
 import { Timer } from './classes/timer.class';
+import { Shell } from './classes/shell.class';
+
 
 // node --inspect --debug-brk movement.js
 
@@ -22,6 +24,25 @@ const JERK_LIMIT = stepsPerTurn / (16 / 1);
 
 const IS_BROWSER = (typeof window !== 'undefined');
 
+export const MoveType = {
+  UNDEFINED: 'undefined',
+  MOVE: 'move',
+  SKIRT: 'skirt',
+  WALL_OUTER: 'wall-outer',
+  WALL_INNER: 'wall-inner',
+  FILL: 'fill',
+  SUPPORT: 'support',
+  BRIDGE: 'bridge'
+};
+
+export const MatterSliceMoveTypes: { [key: string]: string } = {
+  'SKIRT': MoveType.SKIRT,
+  'WALL-OUTER': MoveType.WALL_OUTER,
+  'WALL-INNER': MoveType.WALL_INNER,
+  'FILL': MoveType.FILL,
+  'SUPPORT': MoveType.SUPPORT,
+  'BRIDGE': MoveType.BRIDGE
+};
 
 
 export class PWMController {
@@ -31,18 +52,22 @@ export class PWMController {
   }
 }
 
+const STEPPERS: Stepper[] = [
+  new Stepper('x', 0, 0, 1, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, stepsPerTurn / 40), // 160
+  new Stepper('y', 1, 2, 3, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, stepsPerTurn  / 40),
+  new Stepper('z', 2, 4, 5, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, (stepsPerTurn * 5.21)  / 40), // 3316.36
+  new Stepper('e', 3, null, null, 1e10, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn),
+];
+
 export interface ICONFIG {
-  steppers: Stepper[],
-  PWMControllers: PWMController[]
+  indexSpeedOn: string;
+  steppers: Stepper[];
+  PWMControllers: PWMController[];
 }
 
-export const CONFIG: ICONFIG = <ICONFIG>{
-  steppers: [
-    new Stepper('x', 0, 0, 1, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, stepsPerTurn / 40), // 160
-    new Stepper('y', 1, 2, 3, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, stepsPerTurn  / 40),
-    new Stepper('z', 2, 4, 5, ACCELERATION_LIMIT, SPEED_LIMIT, JERK_LIMIT, (stepsPerTurn * 5.21)  / 40), // 3316.36
-    new Stepper('e', 3, null, null, 1e10, SPEED_LIMIT, JERK_LIMIT, 160 / 6400 * stepsPerTurn),
-  ],
+export const CONFIG: ICONFIG = {
+  indexSpeedOn: 'max',
+  steppers: STEPPERS,
   PWMControllers: [
     new PWMController(0, 0, (analogValue: number, targetValue: number, currentPWMValue: number) => {
       return (targetValue / analogValue) * currentPWMValue;
@@ -50,18 +75,49 @@ export const CONFIG: ICONFIG = <ICONFIG>{
   ]
 };
 
-class CommandsGrouper {
-}
 
 export class CNCController {
 
+  static typeRegExp: RegExp = new RegExp('^TYPE:(.+)$');
+  static getMatterSliceMoveType(command: GCODECommand): any {
+    if(command.comment) {
+      let match = CNCController.typeRegExp.exec(command.comment);
+      if(match) {
+        let type: string = match[1];
+        if(type in MatterSliceMoveTypes) {
+          return MatterSliceMoveTypes[type];
+        } else {
+          Shell.warn('Unknown type : ' + type);
+          return MoveType.UNDEFINED;
+        }
+      }
+    }
+    return null;
+  }
+
+  static layerRegExp: RegExp = new RegExp('^LAYER:(\\d+)$');
+  static getMatterSliceLayer(command: GCODECommand): any {
+    if(command.comment) {
+      let match = CNCController.layerRegExp.exec(command.comment);
+      if(match) {
+        let layer: number = parseInt(match[1]);
+        if(isNaN(layer)) {
+          Shell.warn('Unknown layer : ' + layer);
+        } else {
+          return layer;
+        }
+      }
+    }
+    return null;
+  }
+
   static parseFile(path: string, config: ICONFIG): Promise<ConstrainedMovementsSequence> {
-    return GCODEParser.parseFile(path).then((data: GCODECommand[]) => {
-      return CNCController.parseGCODECommand(data, config);
+    return GCODEHelper.parseFilePromise(path).then((data: GCODECommand[]) => {
+      return CNCController.parseGCODECommands(data, config);
     });
   }
 
-  static parseGCODECommand(commands: GCODECommand[], config: ICONFIG): ConstrainedMovementsSequence {
+  static parseGCODECommands(commands: GCODECommand[], config: ICONFIG): ConstrainedMovementsSequence {
     let movementsSequence: ConstrainedMovementsSequence = new ConstrainedMovementsSequence(config.steppers.length);
     movementsSequence.require(commands.length);
     let movementsSequenceLength: number = 0;
@@ -69,11 +125,14 @@ export class CNCController {
     let stepper: Stepper;
     let command: GCODECommand;
     let movesSequence: ConstrainedMovesSequence;
- 
+
     let localConfig: any = {
       unitFactor: 1, // 1 for millimeters, 25.4 for inches,
       absolutePosition: true,
-      position: {}
+      position: {},
+      speed: 1e4, // mm/s
+      type: MoveType.UNDEFINED,
+      layer: 0
     };
 
     for(let i = 0; i < config.steppers.length; i++) {
@@ -82,12 +141,20 @@ export class CNCController {
 
     for(let j = 0; j < commands.length; j++) {
       command = commands[j];
+      // console.log(command);
       // if(j > 30) break;
+
+      let type: string = CNCController.getMatterSliceMoveType(command);
+      if(type) localConfig.type = type;
 
       switch(command.command) {
         case 'G0':
         case 'G1':
           // console.log(command.params);
+          if(command.params['f']) {
+            localConfig.speed = (command.params['f'] * localConfig.unitFactor) / 60;
+          }
+
           for(let i = 0; i < config.steppers.length; i++) {
             stepper        = config.steppers[i];
             movesSequence  = <ConstrainedMovesSequence>movementsSequence.moves[i];
@@ -108,7 +175,7 @@ export class CNCController {
             }
 
             movesSequence._buffers.values[movementsSequenceLength]             = delta;
-            movesSequence._buffers.speedLimits[movementsSequenceLength]        = stepper.speedLimit;
+            movesSequence._buffers.speedLimits[movementsSequenceLength]        = Math.min(stepper.speedLimit, localConfig.speed * stepper.stepsPerMm);
             movesSequence._buffers.accelerationLimits[movementsSequenceLength] = stepper.accelerationLimit;
             movesSequence._buffers.jerkLimits[movementsSequenceLength]         = stepper.jerkLimit;
           }
@@ -141,6 +208,67 @@ export class CNCController {
     movementsSequence.length = movementsSequenceLength;
 
     return movementsSequence;
+  }
+
+  static createAGCODEFile(path: string, stepperMovementsSequence: StepperMovementsSequence, options: any = {}): Promise<void> {
+    return new Promise((resolve: any, reject: any) => {
+
+      const file = fs.openSync(path, 'w+');
+
+      // let buf = Buffer.from([0x10]);
+      // for(let i = 0; i < 1e9; i++) {
+      //   fs.write(file, buf);
+      // }
+      // console.log('write all');
+      //
+      // return;
+
+      let movesLength: number = stepperMovementsSequence.moves.length;
+
+      if(options.binary) {
+        let times = Buffer.from(stepperMovementsSequence._buffers.times.buffer);
+        let initialSpeeds = Buffer.from(stepperMovementsSequence._buffers.initialSpeeds.buffer);
+        let accelerations = Buffer.from(stepperMovementsSequence._buffers.accelerations.buffer);
+
+        let moves: Buffer[] = [];
+        for(let j = 0; j < movesLength; j++) {
+          moves[j] = Buffer.from(stepperMovementsSequence.moves[j]._buffers.values.buffer);
+        }
+
+        for(let i = 0, length = stepperMovementsSequence.length; i < length; i++) {
+          let a = i * 8;
+          let b = a + 8;
+
+          fs.writeSync(file, Buffer.from([0x10]));
+          fs.writeSync(file, times.slice(a, b));
+          fs.writeSync(file, initialSpeeds.slice(a, b));
+          fs.writeSync(file, accelerations.slice(a, b));
+
+          a = i * 4;
+          b = a + 4;
+          for(let j = 0; j < movesLength; j++) {
+            fs.writeSync(file, moves[j].slice(a, b));
+          }
+        }
+      } else {
+        for(let i = 0, length = stepperMovementsSequence.length; i < length; i++) {
+          fs.writeSync(file, 'G0 ');
+          // fs.writeSync(file, 'I' + stepperMovementsSequence._buffers.indices[i] + ' ');
+          fs.writeSync(file, 'T' + stepperMovementsSequence._buffers.times[i] + ' ');
+          fs.writeSync(file, 'S' + stepperMovementsSequence._buffers.initialSpeeds[i] + ' ');
+          fs.writeSync(file, 'A' + stepperMovementsSequence._buffers.accelerations[i] + ' ');
+
+          let move: DynamicSequence;
+          for(let j = 0; j < movesLength; j++) {
+            move = stepperMovementsSequence.moves[j];
+            fs.writeSync(file, CONFIG.steppers[j].name.toUpperCase() + move._buffers.values[i] + ' ');
+          }
+          fs.writeSync(file, '\n');
+        }
+      }
+      console.log('write all');
+      resolve();
+    });
   }
 
   static buildTemperaturePWMController(): PWMController { // TODO
@@ -482,8 +610,9 @@ let getSomeData = ():Promise<ConstrainedMovementsSequence> => {
   // });
 
 
-  return CNCController.parseFile('../assets/' + 'thin_tower' + '.gcode', CONFIG);
+  // return CNCController.parseFile('../assets/' + 'thin_tower' + '.gcode', CONFIG);
   // return CNCController.parseFile('../assets/' + 'fruit_200mm' + '.gcode', CONFIG);
+  return CNCController.parseFile('../assets/' + 'circle' + '.gcode', CONFIG);
 
   // return new Promise((resolve: any, reject: any) => {
   //   let dropElement = document.body;
@@ -504,7 +633,7 @@ let getSomeData = ():Promise<ConstrainedMovementsSequence> => {
   //       let file: File = files[0];
   //       let reader = new FileReader();
   //       reader.addEventListener('load', (event: any) => {
-  //         resolve(CNCController.parseGCODECommand(GCODEParser.parse(event.target.result), CONFIG));
+  //         resolve(CNCController.parseGCODECommand(GCODEHelper.parse(event.target.result), CONFIG));
   //       });
   //
   //       reader.addEventListener('error', (error: any) => {
@@ -547,41 +676,29 @@ let start = () => {
       y += optimizedMovementsSequence.moves[1]._buffers.values[i];
     }
 
-    // console.log(optimizedMovementsSequence.toString());
+    console.log(optimizedMovementsSequence.toString());
     // console.log(optimizedMovementsSequence.toString(-1, 'times'));
     console.log('length', optimizedMovementsSequence.length, 'time', time, 'x', x, 'y', y);
     // console.log(optimizedMovementsSequence.times);
 
-    timer.clear();
-    let stepperMovementsSequence = optimizedMovementsSequence.toStepperMovementsSequence();
+    return optimizedMovementsSequence;
 
-    stepperMovementsSequence.reduce();
-    stepperMovementsSequence.compact();
+    // timer.clear();
+    // let stepperMovementsSequence: StepperMovementsSequence = optimizedMovementsSequence.toStepperMovementsSequence();
+    //
+    // stepperMovementsSequence.reduce();
+    // stepperMovementsSequence.compact();
+    //
+    // timer.disp('converted in', 'ms');
 
-    timer.disp('converted in', 'ms');
 
-
-    let wstream = fs.createWriteStream('commands.txt');
-
-    let movesLength: number = stepperMovementsSequence.moves.length;
-    for(let i = 0, length = stepperMovementsSequence.length; i < length; i++) {
-      wstream.write('G0 ');
-      // wstream.write('I' + stepperMovementsSequence._buffers.indices[i] + ' ');
-      wstream.write('T' + stepperMovementsSequence._buffers.times[i].toString() + ' ');
-      wstream.write('S' + stepperMovementsSequence._buffers.initialSpeeds[i] + ' ');
-      wstream.write('A' + stepperMovementsSequence._buffers.accelerations[i] + ' ');
-
-      let move: DynamicSequence;
-      for(let j = 0; j < movesLength; j++) {
-        move = stepperMovementsSequence.moves[j];
-        wstream.write(CONFIG.steppers[j].name.toUpperCase() + move._buffers.values[i] + ' ');
-      }
-      wstream.write('\n');
-    }
-
-    wstream.end();
+    // timer.clear();
+    // CNCController.createAGCODEFile('commands.txt', stepperMovementsSequence, { binary: false }).then(() => {
+    //   timer.disp('saved in', 'ms');
+    // });
 
     // console.log(stepperMovementsSequence.toString());
+
     // console.log(stepperMovementsSequence.times);
 
     // let controller = new CNCController(CONFIG);

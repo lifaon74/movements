@@ -519,7 +519,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
           movementsSequenceLength++;
         }
 
-        // // deceleration
+        // deceleration
         if(!Float.isNull(t2, precision)) {
           movementsSequence._buffers.indices[movementsSequenceLength] = index;
           movementsSequence._buffers.times[movementsSequenceLength] = t2;
@@ -657,9 +657,23 @@ export class OptimizedMovesSequence extends DynamicSequence {
       ['values', Float64Array]
     ]);
   }
+
+  round(buffer: any = this._buffers.values) {
+    let position: number = 0;
+    let roundedPosition: number = 0;
+    let delta: number;
+
+    for(let i = 0; i < this._length; i++) {
+      position += this._buffers.values[i];
+      delta = Math.round(position - roundedPosition);
+      roundedPosition += delta;
+      buffer[i] = delta;
+    }
+  }
 }
 
 export class OptimizedMovementsSequence extends DynamicSequenceCollection {
+  public moves: OptimizedMovesSequence[] = [];
 
   constructor(numberOfParallelMoves: number) {
     super(0, [
@@ -674,29 +688,33 @@ export class OptimizedMovementsSequence extends DynamicSequenceCollection {
     }
   }
 
+  reduce() {
+    let writeIndex: number = 0;
+    for(let i = 0; i < this._length; i++) {
+      if(!this.isNull(i)) {
+        this.move(writeIndex, i);
+        writeIndex++;
+      }
+    }
+    this.length = writeIndex;
+  }
+
+  isNull(index: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    for(let i = 0; i < this.moves.length; i++) {
+      if(!Float.isNull((<ConstrainedMovesSequence>this.moves[i])._buffers.values[index], precision)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+
   toStepperMovementsSequence(): StepperMovementsSequence {
     let movementsSequence = new StepperMovementsSequence(this.moves.length);
     movementsSequence.length = this._length;
 
-    let values: Float64Array;
-    let move: StepperMovesSequence;
-    let position: number; // true position
-    let roundedPosition: number;
-    let delta: number;
-
-
     for(let i = 0; i < this.moves.length; i++) {
-      values  = this.moves[i]._buffers.values;
-      move    = movementsSequence.moves[i];
-      position = 0;
-      roundedPosition = 0;
-
-      for(let j = 0; j < this._length; j++) {
-        position += values[j];
-        delta = Math.round(position - roundedPosition);
-        roundedPosition += delta;
-        move._buffers.values[j] = delta;
-      }
+      this.moves[i].round(movementsSequence.moves[i]._buffers.values);
     }
 
     for(let i = 0; i < this._length; i++) {
@@ -704,7 +722,6 @@ export class OptimizedMovementsSequence extends DynamicSequenceCollection {
       movementsSequence._buffers.initialSpeeds[i] = this._buffers.initialSpeeds[i];
       movementsSequence._buffers.accelerations[i] = this._buffers.accelerations[i];
     }
-
 
     return movementsSequence;
   }
@@ -723,7 +740,7 @@ export class OptimizedMovementsSequence extends DynamicSequenceCollection {
     } else {
       switch(type) {
         case 'values':
-          return 'time: ' + this._buffers.times[index] + ' => ' +
+          return '(' + this._buffers.indices[index] + ') ' + 'time: ' + this._buffers.times[index] + ' => ' +
             this.moves.map((move: OptimizedMovesSequence) => {
               // return move.toString(index);
               let value = move._buffers.values[index];
