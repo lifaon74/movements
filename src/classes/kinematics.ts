@@ -658,7 +658,7 @@ export class OptimizedMovesSequence extends DynamicSequence {
     ]);
   }
 
-  round(buffer: any = this._buffers.values) {
+  roundValues(buffer: any = this._buffers.values) {
     let position: number = 0;
     let roundedPosition: number = 0;
     let delta: number;
@@ -688,6 +688,12 @@ export class OptimizedMovementsSequence extends DynamicSequenceCollection {
     }
   }
 
+  roundValues() {
+    for(let i = 0; i < this.moves.length; i++) {
+      this.moves[i].roundValues();
+    }
+  }
+
   reduce() {
     let writeIndex: number = 0;
     for(let i = 0; i < this._length; i++) {
@@ -708,13 +714,12 @@ export class OptimizedMovementsSequence extends DynamicSequenceCollection {
     return true;
   }
 
-
   toStepperMovementsSequence(): StepperMovementsSequence {
     let movementsSequence = new StepperMovementsSequence(this.moves.length);
     movementsSequence.length = this._length;
 
     for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i].round(movementsSequence.moves[i]._buffers.values);
+      this.moves[i].roundValues(movementsSequence.moves[i]._buffers.values);
     }
 
     for(let i = 0; i < this._length; i++) {

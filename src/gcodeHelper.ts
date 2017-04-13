@@ -71,7 +71,7 @@ export class GCODECommand {
   }
 }
 
-export class GCodeReader extends Stream.Transform {
+export class GCodeReaderStream extends Stream.Transform {
   private gcode: string = '';
 
   constructor() {
@@ -112,7 +112,7 @@ export class GCodeReader extends Stream.Transform {
 
 }
 
-export class GCodeWriter extends Stream.Transform {
+export class GCodeWriterStream extends Stream.Transform {
 
   constructor() {
     super({ writableObjectMode: true });
@@ -136,7 +136,7 @@ export class GCODEHelper {
 
   static parseFile(path: string): Stream {
     const readStream = fs.createReadStream(path);
-    return readStream.pipe(new GCodeReader());
+    return readStream.pipe(new GCodeReaderStream());
   }
 
   static parseFilePromise(path: string): Promise<GCODECommand[]> {
@@ -171,10 +171,10 @@ export class GCODEHelper {
     return commands;
   }
 
-
   static stringify(commands: GCODECommand[]): string {
     return commands.map((command: GCODECommand) => command.toString()).join('\n');
   }
+
 
 
   static moveTo(commands: GCODECommand[], x: number, y: number, z?: number, e?: number): GCODECommand[] {
@@ -190,16 +190,12 @@ export class GCODEHelper {
   static arc(
     commands: GCODECommand[],
     x: number, y: number, radius: number,
-    startAngle: number = 0, endAngle: number = Math.PI * 2, anticlockwise: boolean = false,
+    startAngle: number = 0, angle: number = Math.PI * 2,
     steps: number = 100
-  ) {
+  ): GCODECommand[] {
     if(steps > 1) {
-      let angle = anticlockwise ? (endAngle - startAngle) : (startAngle - endAngle);
-      if(angle < 0) angle += Math.PI * 2;
-      angle = angle % (Math.PI * 2);
-
       for(let i = 0; i < steps; i++) {
-        let a = startAngle + angle * i / (steps - 1);
+        let a = startAngle - angle * i / (steps - 1);
         this.moveTo(
           commands,
           x + Math.cos(a) * radius,
@@ -212,13 +208,18 @@ export class GCODEHelper {
         y + Math.sin(startAngle) * radius
       );
 
-      commands.push(new GCODECommand(anticlockwise ? 'G3' : 'G2', {
-        x: x + Math.cos(endAngle) * radius,
-        y: y + Math.sin(endAngle) * radius,
+      commands.push(new GCODECommand((angle < 0) ? 'G3' : 'G2', {
+        x: x + Math.cos(startAngle + angle) * radius,
+        y: y + Math.sin(startAngle + angle) * radius,
         i: x,
         j: y
       }));
     }
+    return commands;
+  }
+
+  static circle(commands: GCODECommand[], x: number, y: number, radius: number, steps: number = 100): GCODECommand[] {
+    GCODEHelper.arc(commands, x, y, radius, 0, 2 * Math.PI, steps);
     return commands;
   }
 
@@ -239,15 +240,20 @@ const createCircle = (path: string) => {
       resolve();
     });
 
-    writer.pipe(new GCodeWriter()).pipe(fileWriter);
+    fileWriter.on('error', (error: Error) => {
+      reject(error);
+    });
 
-    writer.push(GCODEHelper.arc([], 0, 0, 100, 1 / 4 * Math.PI, 3 / 4 * Math.PI, true, 1000));
+    writer.pipe(new GCodeWriterStream()).pipe(fileWriter);
+
+    // writer.push(GCODEHelper.arc([], 0, 0, 100, 1 / 4 * Math.PI, 3 / 4 * Math.PI, true, 100));
+    writer.push(GCODEHelper.circle([], 0, 0, 100, 100));
     writer.push(null);
   });
 };
 
 
-// createCircle('../assets/circle.gcode');
+createCircle('../assets/circle.gcode');
 
 // console.log(GCODEHelper.moveTo(10, 10)[0].toString());
 // console.log(GCODEHelper.arc([], 0, 0, 100, 1 / 4 * Math.PI, 3 / 4 * Math.PI, true, 100).map(a => a.toString()).join('\n'));

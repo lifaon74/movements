@@ -69,7 +69,7 @@ export class Float {
         if(match[1]) str += match[1];
         if(match[2]) str += match[2];
 
-        let exp = Math.log10(1e-2);
+        let exp = Math.log10(precision);
         if(exp < 0) {
           if(match[3]) str += '.' + match[3].slice(0, -exp);
         }

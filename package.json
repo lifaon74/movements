@@ -14,10 +14,10 @@
     "@types/core-js": "latest",
     "@types/node": "latest",
     "@types/rpio": "latest",
-    "browserify": "^13.1.1",
-    "gulp": "^3.9.1",
-    "gulp-typescript": "^3.1.3",
-    "typescript": "^2.0.10",
+    "browserify": "latest",
+    "gulp": "latest",
+    "gulp-typescript": "latest",
+    "typescript": "latest",
     "vinyl-source-stream": "^1.1.0"
   },
   "dependencies": {
