@@ -82,9 +82,9 @@ export class GCODEOptimizer {
 
   static getMatterSliceMoveType(command: GCODECommand): any {
     if(command.comment) {
-      let match = this.typeRegExp.exec(command.comment);
+      const match: string[] = this.typeRegExp.exec(command.comment);
       if(match) {
-        let type: string = match[1];
+        const type: string = match[1];
         if(type in MatterSliceMoveTypes) {
           return MatterSliceMoveTypes[type];
         } else {
@@ -100,9 +100,9 @@ export class GCODEOptimizer {
 
   static getMatterSliceLayer(command: GCODECommand): any {
     if(command.comment) {
-      let match = this.layerRegExp.exec(command.comment);
+      const match: string[] = this.layerRegExp.exec(command.comment);
       if(match) {
-        let layer: number = parseInt(match[1]);
+        const layer: number = parseInt(match[1]);
         if(isNaN(layer)) {
           Shell.warn('Unknown layer : ' + layer);
         } else {
@@ -114,7 +114,7 @@ export class GCODEOptimizer {
   }
 
   static optimizeFile(path: string, config: ICONFIG): Promise<any> {
-    let timer = new Timer();
+    const timer: Timer = new Timer();
     return GCODEHelper.parseFilePromise(path)
       .then((data: GCODECommand[]) => {
         timer.disp('opened in', 'ms');
@@ -123,7 +123,7 @@ export class GCODEOptimizer {
         const movementsSequence: ConstrainedMovementsSequence = this.parseGCODECommands(data, config);
         timer.disp('converted in', 'ms');
 
-        let optimizedMovementsSequence: OptimizedMovementsSequence = this.optimizeConstrainedMovementsSequence(movementsSequence);
+        const optimizedMovementsSequence: OptimizedMovementsSequence = this.optimizeConstrainedMovementsSequence(movementsSequence);
 
         let time = 0, x = 0, y = 0;
         for(let i = 0, length = optimizedMovementsSequence._buffers.times.length; i < length; i++) {
@@ -137,11 +137,12 @@ export class GCODEOptimizer {
         console.log('length', optimizedMovementsSequence.length, 'time', time, 'x', x, 'y', y);
         // console.log(optimizedMovementsSequence.times);
 
+        return this.createAGCODEFile('test.agcode', optimizedMovementsSequence);
       });
   }
 
   static parseGCODECommands(commands: GCODECommand[], config: ICONFIG): ConstrainedMovementsSequence {
-    let movementsSequence: ConstrainedMovementsSequence = new ConstrainedMovementsSequence(config.steppers.length);
+    const movementsSequence: ConstrainedMovementsSequence = new ConstrainedMovementsSequence(config.steppers.length);
     movementsSequence.require(commands.length);
     let movementsSequenceLength: number = 0;
 
@@ -149,7 +150,7 @@ export class GCODEOptimizer {
     let command: GCODECommand;
     let movesSequence: ConstrainedMovesSequence;
 
-    let localConfig: any = {
+    const localConfig: any = {
       unitFactor: 1, // 1 for millimeters, 25.4 for inches,
       absolutePosition: true,
       position: {},
@@ -167,7 +168,7 @@ export class GCODEOptimizer {
       // console.log(command);
       // if(j > 30) break;
 
-      let type: string = this.getMatterSliceMoveType(command);
+      const type: string = this.getMatterSliceMoveType(command);
       if(type) localConfig.type = type;
 
       switch(command.command) {
@@ -234,13 +235,13 @@ export class GCODEOptimizer {
   }
 
   static optimizeConstrainedMovementsSequence(movementsSequence: ConstrainedMovementsSequence): OptimizedMovementsSequence {
-    let timer = new Timer();
+    const timer = new Timer();
     timer.clear();
     movementsSequence.reduce();
     timer.disp('reduced in', 'ms');
 
     timer.clear();
-    let optimizedMovementsSequence: OptimizedMovementsSequence = movementsSequence.optimize();
+    const optimizedMovementsSequence: OptimizedMovementsSequence = movementsSequence.optimize();
     timer.disp('optimized in', 'ms');
 
     // optimizedMovementsSequence.compact();
@@ -264,21 +265,21 @@ export class GCODEOptimizer {
       //
       // return;
 
-      let movesLength: number = movementsSequence.moves.length;
+      const movesLength: number = movementsSequence.moves.length;
 
       if(options.binary) {
-        let times = Buffer.from(movementsSequence._buffers.times.buffer);
-        let initialSpeeds = Buffer.from(movementsSequence._buffers.initialSpeeds.buffer);
-        let accelerations = Buffer.from(movementsSequence._buffers.accelerations.buffer);
+        const times: Buffer = Buffer.from(movementsSequence._buffers.times.buffer);
+        const initialSpeeds: Buffer = Buffer.from(movementsSequence._buffers.initialSpeeds.buffer);
+        const accelerations: Buffer = Buffer.from(movementsSequence._buffers.accelerations.buffer);
 
-        let moves: Buffer[] = [];
+        const moves: Buffer[] = [];
         for(let j = 0; j < movesLength; j++) {
           moves[j] = Buffer.from(movementsSequence.moves[j]._buffers.values.buffer);
         }
 
         for(let i = 0, length = movementsSequence.length; i < length; i++) {
-          let a = i * 8;
-          let b = a + 8;
+          let a: number = i * 8;
+          let b: number = a + 8;
 
           fs.writeSync(file, Buffer.from([0x10]));
           fs.writeSync(file, times.slice(a, b));

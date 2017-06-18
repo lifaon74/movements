@@ -26,7 +26,13 @@ gulp.task('browserify', ['build.js'], function() {
     .pipe(gulp.dest('bundle'));
 });
 
-gulp.task('watch', ['build.js', 'browserify'], () => {
-  gulp.watch(SRC_FILES, ['build.js', 'browserify']);
+gulp.task('watch', [
+  'build.js',
+  // 'browserify'
+], () => {
+  gulp.watch(SRC_FILES, [
+    'build.js',
+    // 'browserify'
+]);
 });
 

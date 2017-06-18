@@ -1,7 +1,7 @@
 import * as Stream from 'stream';
+import * as fs from 'fs';
 import { Float } from './classes/float.class';
 
-const fs = require('fs');
 
 
 export class GCODECommand {
@@ -78,7 +78,7 @@ export class GCodeReaderStream extends Stream.Transform {
     super({ readableObjectMode: true });
   }
 
-  protected _transform(gcode: Buffer | string, encoding: string, callback: () => void) {
+  _transform(gcode: Buffer | string, encoding: string, callback: () => void) {
     if(gcode instanceof Buffer) {
       this.parseGCODE(gcode.toString());
       callback();
@@ -118,9 +118,9 @@ export class GCodeWriterStream extends Stream.Transform {
     super({ writableObjectMode: true });
   }
 
-  protected _transform(commands: GCODECommand[], encoding: string, callback: () => void) {
+  _transform(commands: GCODECommand[], encoding: string, callback: () => void) {
     if(commands instanceof Array) {
-      let gcode = GCODEHelper.stringify(commands);
+      const gcode: string = GCODEHelper.stringify(commands);
       if(gcode) this.push(gcode);
       callback();
     } else {
@@ -140,9 +140,9 @@ export class GCODEHelper {
   }
 
   static parseFilePromise(path: string): Promise<GCODECommand[]> {
-    return new Promise((resolve: any, reject: any) => {
+    return new Promise<GCODECommand[]>((resolve: any, reject: any) => {
       const commands: GCODECommand[] = [];
-      const parser = this.parseFile(path);
+      const parser: Stream = this.parseFile(path);
       parser.on('data', (_commands: GCODECommand[]) => {
         _commands.forEach((command: any) => {
           commands.push(command);
@@ -178,7 +178,7 @@ export class GCODEHelper {
 
 
   static moveTo(commands: GCODECommand[], x: number, y: number, z?: number, e?: number): GCODECommand[] {
-    let params: any = {};
+    const params: any = {};
     if(x !== void 0) params.x = x;
     if(y !== void 0) params.y = y;
     if(z !== void 0) params.x = z;
@@ -195,7 +195,7 @@ export class GCODEHelper {
   ): GCODECommand[] {
     if(steps > 1) {
       for(let i = 0; i < steps; i++) {
-        let a = startAngle - angle * i / (steps - 1);
+        const a: number = startAngle - angle * i / (steps - 1);
         this.moveTo(
           commands,
           x + Math.cos(a) * radius,
@@ -247,15 +247,14 @@ const createCircle = (path: string) => {
     writer.pipe(new GCodeWriterStream()).pipe(fileWriter);
 
     // writer.push(GCODEHelper.arc([], 0, 0, 100, 1 / 4 * Math.PI, 3 / 4 * Math.PI, true, 100));
-    writer.push(GCODEHelper.circle([], 0, 0, 100, 100));
+    writer.push(GCODEHelper.circle([], 0, 0, 1000, 1000000));
     writer.push(null);
   });
 };
 
+// createCircle('../assets/circle.gcode');
 
-createCircle('../assets/circle.gcode');
-
-// console.log(GCODEHelper.moveTo(10, 10)[0].toString());
+// console.log(GCODEHelper.moveTo([], 10, 10)[0].toString());
 // console.log(GCODEHelper.arc([], 0, 0, 100, 1 / 4 * Math.PI, 3 / 4 * Math.PI, true, 100).map(a => a.toString()).join('\n'));
 
 // GCODEHelper.parseFilePromise('../assets/' + 'thin_tower' + '.gcode');
