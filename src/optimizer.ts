@@ -123,10 +123,12 @@ export class GCODEOptimizer {
         const movementsSequence: ConstrainedMovementsSequence = this.parseGCODECommands(data, config);
         timer.disp('converted in', 'ms');
 
+        movementsSequence.length = 20;
+
         const optimizedMovementsSequence: OptimizedMovementsSequence = this.optimizeConstrainedMovementsSequence(movementsSequence);
 
         let time = 0, x = 0, y = 0;
-        for(let i = 0, length = optimizedMovementsSequence._buffers.times.length; i < length; i++) {
+        for(let i = 0, length = optimizedMovementsSequence._buffers['times'].length; i < length; i++) {
           time += optimizedMovementsSequence._buffers.times[i];
           x += optimizedMovementsSequence.moves[0]._buffers.values[i];
           y += optimizedMovementsSequence.moves[1]._buffers.values[i];
@@ -236,9 +238,13 @@ export class GCODEOptimizer {
 
   static optimizeConstrainedMovementsSequence(movementsSequence: ConstrainedMovementsSequence): OptimizedMovementsSequence {
     const timer = new Timer();
+    const length: number = movementsSequence.length;
     timer.clear();
+    // movementsSequence.roundValues();
     movementsSequence.reduce();
     timer.disp('reduced in', 'ms');
+    console.log(length, '=>', movementsSequence.length); // TODO WORKING on higher reducer
+    // console.log(movementsSequence.toString(-1, 'limits'));
 
     timer.clear();
     const optimizedMovementsSequence: OptimizedMovementsSequence = movementsSequence.optimize();
@@ -268,9 +274,9 @@ export class GCODEOptimizer {
       const movesLength: number = movementsSequence.moves.length;
 
       if(options.binary) {
-        const times: Buffer = Buffer.from(movementsSequence._buffers.times.buffer);
-        const initialSpeeds: Buffer = Buffer.from(movementsSequence._buffers.initialSpeeds.buffer);
-        const accelerations: Buffer = Buffer.from(movementsSequence._buffers.accelerations.buffer);
+        const times: Buffer = Buffer.from(movementsSequence._buffers['times'].buffer);
+        const initialSpeeds: Buffer = Buffer.from(movementsSequence._buffers['initialSpeeds'].buffer);
+        const accelerations: Buffer = Buffer.from(movementsSequence._buffers['accelerations'].buffer);
 
         const moves: Buffer[] = [];
         for(let j = 0; j < movesLength; j++) {

@@ -248,6 +248,7 @@ const createCircle = (path: string) => {
 
     // writer.push(GCODEHelper.arc([], 0, 0, 100, 1 / 4 * Math.PI, 3 / 4 * Math.PI, true, 100));
     writer.push(GCODEHelper.circle([], 0, 0, 1000, 1000000));
+    // writer.push(GCODEHelper.circle([], 0, 0, 100, 100));
     writer.push(null);
   });
 };
