@@ -600,7 +600,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
     if(this.areCorrelated(index_0, index_1, precision)) {
       let movesSequence: ConstrainedMovesSequence;
       for(let i = 0; i < this.moves.length; i++) {
-        movesSequence = <ConstrainedMovesSequence>this.moves[i];
+        movesSequence = this.moves[i];
         movesSequence._buffers.values[index_0] += movesSequence._buffers.values[index_1];
         movesSequence._buffers.values[index_1] = 0;
       }
@@ -611,10 +611,9 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
   }
 
 
-
   isNull(index: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
     for(let i = 0; i < this.moves.length; i++) {
-      if(!Float.isNull((<ConstrainedMovesSequence>this.moves[i])._buffers.values[index], precision)) {
+      if(!Float.isNull(this.moves[i]._buffers.values[index], precision)) {
         return false;
       }
     }
@@ -622,19 +621,23 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
   }
 
   areCollinear(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
-    let movesSequence: ConstrainedMovesSequence = <ConstrainedMovesSequence>this.moves[0];
-    let value_0: number  = movesSequence._buffers.values[index_0];
-    let value_1: number = movesSequence._buffers.values[index_1];
-    const factor: number = value_0 / value_1;
-    for(let i = 1; i < this.moves.length; i++) {
-      movesSequence = <ConstrainedMovesSequence>this.moves[i];
+
+    let movesSequence: ConstrainedMovesSequence;
+    let f_0: number = NaN; // if factor === NaN it is a wildcard (all values accepted)
+    let f_1: number;
+    let value_0: number;
+    let value_1: number;
+
+    for(let i = 0; i < this.moves.length; i++) {
+      movesSequence = this.moves[i];
       value_0 = movesSequence._buffers.values[index_0];
       value_1 = movesSequence._buffers.values[index_1];
-      if(
-        (Math.sign(value_0) !== Math.sign(value_1)) ||
-        !Float.equals(factor, value_0 / value_1, precision)
-      ) {
-        return false;
+      if(Math.sign(value_0) !== Math.sign(value_1)) return false;
+      if(isNaN(f_0)) {
+        f_0 = value_0 / value_1;
+      } else {
+        f_1 = value_0 / value_1;
+        if(!isNaN(f_1) && !Float.equals(f_0, f_1, precision)) return false;
       }
     }
     return true;
@@ -647,7 +650,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 
     let movesSequence: ConstrainedMovesSequence;
     for(let i = 0; i < this.moves.length; i++) {
-      movesSequence = <ConstrainedMovesSequence>this.moves[i];
+      movesSequence = this.moves[i];
       if(
         !Float.equals(movesSequence._buffers.speedLimits[index_0], movesSequence._buffers.speedLimits[index_1], precision) ||
         !Float.equals(movesSequence._buffers.accelerationLimits[index_0], movesSequence._buffers.accelerationLimits[index_1], precision) ||
@@ -664,22 +667,32 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
   toString(index: number = -1, type: string = 'values'): string {
     if(index === -1) {
       let str: string = '';
-      for(let i = 0, length = this.length; i < length; i++) {
-        str += this.toString(i, type) + '\n';
+      for(let i = 0, length = Math.min(10, this.length); i < length; i++) {
+        str += this.toString(i, type) + '\n\n---\n\n';
       }
       return str;
     } else {
       switch(type) {
         case 'values':
-          return (<ConstrainedMovesSequence[]>this.moves).map((move: ConstrainedMovesSequence) => {
-            return move.toString(index, 'value');
-          }).join(', ');
+          // return (<ConstrainedMovesSequence[]>this.moves).map((move: ConstrainedMovesSequence) => {
+          //   return move.toString(index, 'value');
+          // }).join(', ');
+          return '(' + this._buffers.indices[index] + ') => ' +
+            this.moves.map((move: ConstrainedMovesSequence) => {
+              // return move.toString(index);
+              return '{ ' +
+                'value: ' + move._buffers.values[index] +
+                ', speed: ' + move._buffers.speedLimits[index] +
+                ', accel: ' + move._buffers.accelerationLimits[index] +
+                ', jerk: ' +  move._buffers.jerkLimits[index] +
+                ' }';
+            }).join(',\n');
         case 'limits':
           return this.moves.map((move: ConstrainedMovesSequence) => {
             return move.toString(index, 'limits');
           }).join(', ');
         default:
-          return '';
+          throw new RangeError('Invalid type');
       }
     }
   }

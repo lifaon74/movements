@@ -123,8 +123,6 @@ export class GCODEOptimizer {
         const movementsSequence: ConstrainedMovementsSequence = this.parseGCODECommands(data, config);
         timer.disp('converted in', 'ms');
 
-        movementsSequence.length = 20;
-
         const optimizedMovementsSequence: OptimizedMovementsSequence = this.optimizeConstrainedMovementsSequence(movementsSequence);
 
         let time = 0, x = 0, y = 0;
@@ -134,7 +132,7 @@ export class GCODEOptimizer {
           y += optimizedMovementsSequence.moves[1]._buffers.values[i];
         }
 
-        console.log(optimizedMovementsSequence.toString());
+        // console.log(optimizedMovementsSequence.toString());
         // console.log(optimizedMovementsSequence.toString(-1, 'times'));
         console.log('length', optimizedMovementsSequence.length, 'time', time, 'x', x, 'y', y);
         // console.log(optimizedMovementsSequence.times);
@@ -240,11 +238,12 @@ export class GCODEOptimizer {
     const timer = new Timer();
     const length: number = movementsSequence.length;
     timer.clear();
-    // movementsSequence.roundValues();
+    movementsSequence.roundValues();
     movementsSequence.reduce();
+
     timer.disp('reduced in', 'ms');
-    console.log(length, '=>', movementsSequence.length); // TODO WORKING on higher reducer
-    // console.log(movementsSequence.toString(-1, 'limits'));
+    // console.log(length, '=>', movementsSequence.length); // TODO WORKING on higher reducer
+    // console.log(movementsSequence.toString(-1, 'values'));
 
     timer.clear();
     const optimizedMovementsSequence: OptimizedMovementsSequence = movementsSequence.optimize();
