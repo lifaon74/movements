@@ -115,6 +115,23 @@ export class DynamicSequence {
     }
   }
 
+  /**
+   * EXPECT _buffers['values']
+   */
+
+  roundValues(buffer: any = this._buffers['values']): void {
+    let value: number = 0;
+    let roundedValue: number = 0;
+    let delta: number;
+
+    for(let i = 0; i < this._length; i++) {
+      value += this._buffers['values'][i];
+      delta = Math.round(value - roundedValue);
+      roundedValue += delta;
+      buffer[i] = delta;
+    }
+  }
+
 }
 
 export class DynamicSequenceCollection extends DynamicSequence {
@@ -163,14 +180,132 @@ export class DynamicSequenceCollection extends DynamicSequence {
   // Move the movement at index_1 into the movement at index_0
   move(index_0: number, index_1: number): this {
     for(let i = 0; i < this.moves.length; i++) {
-      (<DynamicSequence>this.moves[i]).move(index_0, index_1);
+      this.moves[i].move(index_0, index_1);
     }
     super.move(index_0, index_1);
     return this;
   }
 
-}
 
+  /**
+   * EXPECT _buffers['values']
+   */
+  roundValues() {
+    for(let i = 0; i < this.moves.length; i++) {
+      this.moves[i].roundValues();
+    }
+  }
+
+  isNull(index: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    for(let i = 0; i < this.moves.length; i++) {
+      if(!Float.isNull(this.moves[i]._buffers.values[index], precision)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  areCollinear(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    let movesSequence: ConstrainedMovesSequence;
+    let f_0: number = NaN; // if factor === NaN it is a wildcard (all values accepted)
+    let f_1: number;
+    let positive: boolean;
+    let value_0: number;
+    let value_1: number;
+
+    for(let i = 0; i < this.moves.length; i++) {
+      movesSequence = this.moves[i];
+      value_0 = Float.round(movesSequence._buffers['values'][index_0], precision);
+      value_1 = Float.round(movesSequence._buffers['values'][index_1], precision);
+      if(isNaN(f_0)) {
+        f_0 = value_0 / value_1;
+        positive = value_1 > value_0;
+      } else { // f_0 !== NaN
+        f_1 = value_0 / value_1;
+        if(
+          !isNaN(f_1) &&
+          ((f_0 !== f_1) || ((value_1 > value_0) !== positive))
+        ) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+
+  /**
+   * Remove unnecessary movements
+   */
+  reduce() {
+    if(this._length > 0) {
+      let length: number = this._length;
+      let readIndex: number = 1;
+      let writeIndex: number = 0;
+      for(; readIndex < length; readIndex++) {
+        if(!this.merge(writeIndex, readIndex)) {
+          // readIndex cannot be merged in writeIndex
+          writeIndex++; // go to next movement
+          if(writeIndex !== readIndex) {
+            this.move(writeIndex, readIndex); // write readIndex in writeIndex
+          }
+        }
+      }
+      this.length = writeIndex + (this.isNull(writeIndex) ? 0 : 1);
+    }
+  }
+
+  /**
+   * Try to merge two movements,
+   * can only append if both movements are collinear and have the same limits
+   * return true if index_1 has been merged in index_0
+   *
+   * @param index_0 movement_0 where de merge will occur
+   * @param index_1 movement_1 to remove if mergeable
+   * @param precision
+   * @returns {boolean}
+   */
+  merge(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    // if(this.isNull(index_1)) {
+    //   return true;
+    // }
+    //
+    // if(this.isNull(index_0)) {
+    //   let movesSequence: ConstrainedMovesSequence;
+    //   for(let i = 0; i < this.moves.length; i++) {
+    //     movesSequence = this.moves[i];
+    //     movesSequence._buffers.values[index_0] = movesSequence._buffers.values[index_1];
+    //     // movesSequence._buffers.values[index_1] = 0; => to force erase
+    //   }
+    //   return true;
+    // }
+
+    if(this.areCorrelated(index_0, index_1, precision)) {
+      let movesSequence: ConstrainedMovesSequence;
+      for(let i = 0; i < this.moves.length; i++) {
+        movesSequence = this.moves[i];
+        movesSequence._buffers.values[index_0] += movesSequence._buffers.values[index_1];
+        // movesSequence._buffers.values[index_1] = 0; // => to force erase
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  areCorrelated(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    if(this.isNull(index_0) || this.isNull(index_1)) {
+      return true;
+    }
+
+    if(!this.areCollinear(index_0, index_1, precision)) {
+      return false;
+    }
+
+    return true;
+  }
+
+}
 
 
 
@@ -187,10 +322,6 @@ export class ConstrainedMovesSequence extends DynamicSequence {
       'accelerationLimits': Float64Array,
       'jerkLimits': Float64Array
     });
-  }
-
-  roundValues(buffer: any = this._buffers['values']): void {
-    DynamicSequence.roundFloatArray(this._buffers['values'] as Float64Array, buffer);
   }
 
   /**
@@ -277,37 +408,6 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
   }
 
 
-  roundValues() {
-    for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i].roundValues();
-    }
-  }
-
-  /**
-   * Remove unnecessary movements
-   */
-  reduce() {
-    let length: number = this.length;
-    if(length === 1) {
-      if(this.isNull(0)) {
-        this.length = 0;
-      }
-    } else {
-      let readIndex: number = 1;
-      let writeIndex: number = 0;
-      for(; readIndex < length; readIndex++) {
-        if(!this.merge(writeIndex, readIndex)) {
-          writeIndex++;
-          if(writeIndex !== readIndex) {
-            this.move(writeIndex, readIndex);
-          }
-        }
-      }
-
-      this.length = writeIndex + 1;
-    }
-  }
-
   optimize(): OptimizedMovementsSequence {
     const normalizedMovesSequence: ConstrainedNormalizedMovesSequence = this._getNormalizedMovesSequence();
     // console.log(normalizedMovesSequence.toString(-1, 'limits'));
@@ -325,18 +425,18 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 
     private _getNormalizedMovesSequence(): ConstrainedNormalizedMovesSequence {
       const movesSequence: ConstrainedNormalizedMovesSequence = new ConstrainedNormalizedMovesSequence();
-      movesSequence.length = this.length;
+      movesSequence.length = this._length;
 
       let move: ConstrainedMovesSequence;
       let speedLimit: number, accelerationLimit: number, value: number;
-      for(let i = 0, length = this.length; i < length; i++) {
+      for(let i = 0, length = this._length; i < length; i++) {
         move = <ConstrainedMovesSequence>this.moves[0];
-        value = Math.abs(move._buffers.values[i]);
+        value = Math.abs(move._buffers['values'][i]);
         speedLimit = move._buffers.speedLimits[i] / value;
         accelerationLimit = move._buffers.accelerationLimits[i] / value;
         for(let j = 1; j < this.moves.length; j++) {
           move = <ConstrainedMovesSequence>this.moves[j];
-          value = Math.abs(move._buffers.values[i]);
+          value = Math.abs(move._buffers['values'][i]);
           speedLimit = Math.min(speedLimit, move._buffers.speedLimits[i] / value);
           accelerationLimit = Math.min(accelerationLimit, move._buffers.accelerationLimits[i] / value);
         }
@@ -359,7 +459,7 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
       let solutions: Matrix;
       let i: number = 0;
       normalizedMovesSequence._buffers.initialSpeeds[i] = 0;
-      for(let length = normalizedMovesSequence.length - 1; i < length; i++) {
+      for(let length = normalizedMovesSequence._length - 1; i < length; i++) {
         initialSpeed = normalizedMovesSequence._buffers.initialSpeeds[i];
         accelerationLimit = normalizedMovesSequence._buffers.accelerationLimits[i];
 
@@ -577,73 +677,11 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
     }
 
 
-
-  /**
-   * Try to merge two movements,
-   * can only append if both movements are collinear and have the same limits
-   *
-   * @param index_0 movement_0 where de merge will occur
-   * @param index_1 movement_1 to remove if mergeable
-   * @param precision
-   * @returns {boolean}
-   */
-  merge(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
-    if(this.isNull(index_0)) {
-      this.move(index_0, index_1);
-      return true;
-    }
-
-    if(this.isNull(index_1)) {
-      return true;
-    }
-
-    if(this.areCorrelated(index_0, index_1, precision)) {
-      let movesSequence: ConstrainedMovesSequence;
-      for(let i = 0; i < this.moves.length; i++) {
-        movesSequence = this.moves[i];
-        movesSequence._buffers.values[index_0] += movesSequence._buffers.values[index_1];
-        movesSequence._buffers.values[index_1] = 0;
-      }
-      return true;
-    }
-
-    return false;
-  }
-
-
-  isNull(index: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
-    for(let i = 0; i < this.moves.length; i++) {
-      if(!Float.isNull(this.moves[i]._buffers.values[index], precision)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  areCollinear(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
-
-    let movesSequence: ConstrainedMovesSequence;
-    let f_0: number = NaN; // if factor === NaN it is a wildcard (all values accepted)
-    let f_1: number;
-    let value_0: number;
-    let value_1: number;
-
-    for(let i = 0; i < this.moves.length; i++) {
-      movesSequence = this.moves[i];
-      value_0 = movesSequence._buffers.values[index_0];
-      value_1 = movesSequence._buffers.values[index_1];
-      if(Math.sign(value_0) !== Math.sign(value_1)) return false;
-      if(isNaN(f_0)) {
-        f_0 = value_0 / value_1;
-      } else {
-        f_1 = value_0 / value_1;
-        if(!isNaN(f_1) && !Float.equals(f_0, f_1, precision)) return false;
-      }
-    }
-    return true;
-  }
-
   areCorrelated(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    if(this.isNull(index_0) || this.isNull(index_1)) {
+      return true;
+    }
+
     if(!this.areCollinear(index_0, index_1, precision)) {
       return false;
     }
@@ -652,9 +690,9 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
     for(let i = 0; i < this.moves.length; i++) {
       movesSequence = this.moves[i];
       if(
-        !Float.equals(movesSequence._buffers.speedLimits[index_0], movesSequence._buffers.speedLimits[index_1], precision) ||
-        !Float.equals(movesSequence._buffers.accelerationLimits[index_0], movesSequence._buffers.accelerationLimits[index_1], precision) ||
-        !Float.equals(movesSequence._buffers.jerkLimits[index_0], movesSequence._buffers.jerkLimits[index_1], precision)
+        !Float.equals(movesSequence._buffers['speedLimits'][index_0], movesSequence._buffers['speedLimits'][index_1], precision) ||
+        !Float.equals(movesSequence._buffers['accelerationLimits'][index_0], movesSequence._buffers['accelerationLimits'][index_1], precision) ||
+        !Float.equals(movesSequence._buffers['jerkLimits'][index_0], movesSequence._buffers['jerkLimits'][index_1], precision)
       ) {
         return false;
       }
@@ -662,7 +700,6 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 
     return true;
   }
-
 
   toString(index: number = -1, type: string = 'values'): string {
     if(index === -1) {
@@ -700,18 +737,12 @@ export class ConstrainedMovementsSequence extends DynamicSequenceCollection {
 }
 
 
-
 export class OptimizedMovesSequence extends DynamicSequence {
   constructor(allocated?: number) {
     super(allocated, {
       'values': Float64Array
     });
   }
-
-  roundValues(buffer: any = this._buffers['values']): void {
-    DynamicSequence.roundFloatArray(this._buffers['values'] as Float64Array, buffer);
-  }
-
 }
 
 export class OptimizedMovementsSequence extends DynamicSequenceCollection {
@@ -730,34 +761,28 @@ export class OptimizedMovementsSequence extends DynamicSequenceCollection {
     }
   }
 
-  roundValues() {
-    for(let i = 0; i < this.moves.length; i++) {
-      this.moves[i].roundValues();
+  areCorrelated(index_0: number, index_1: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
+    if(this.isNull(index_0) || this.isNull(index_1)) {
+      return true;
     }
-  }
 
-  reduce() {
-    let writeIndex: number = 0;
-    for(let i = 0; i < this._length; i++) {
-      if(!this.isNull(i)) {
-        this.move(writeIndex, i);
-        writeIndex++;
-      }
+    if(
+      !Float.equals(this._buffers['times'][index_0], this._buffers['times'][index_1], precision) ||
+      !Float.equals(this._buffers['initialSpeeds'][index_0], this._buffers['initialSpeeds'][index_1], precision) ||
+      !Float.equals(this._buffers['accelerations'][index_0], this._buffers['accelerations'][index_1], precision)
+    ) {
+      return false;
     }
-    this.length = writeIndex;
-  }
 
-  isNull(index: number, precision: number = ConstrainedMovementsSequence.DEFAULT_PRECISION): boolean {
-    for(let i = 0; i < this.moves.length; i++) {
-      if(!Float.isNull((<ConstrainedMovesSequence>this.moves[i])._buffers.values[index], precision)) {
-        return false;
-      }
+    if(!this.areCollinear(index_0, index_1, precision)) {
+      return false;
     }
+
     return true;
   }
 
   toStepperMovementsSequence(): StepperMovementsSequence {
-    let movementsSequence = new StepperMovementsSequence(this.moves.length);
+    const movementsSequence = new StepperMovementsSequence(this.moves.length);
     movementsSequence.length = this._length;
 
     for(let i = 0; i < this.moves.length; i++) {
@@ -777,41 +802,40 @@ export class OptimizedMovementsSequence extends DynamicSequenceCollection {
   /**
    * DEBUG
    */
-  toString(index: number = -1, type: string = 'values'): string {
-    if(index === -1) {
-      let str: string = '';
-      for(let i = 0, length = Math.min(30, this.length); i < length; i++) {
-        str += this.toString(i, type) + '\n----\n';
-      }
-      return str;
-    } else {
+  toString(type: string = 'values', start: number = 0, end: number = this._length): string {
+    let str: string = '';
+
+    for(let i = start, length = end; i < length; i++) {
       switch(type) {
         case 'values':
-          return '(' + this._buffers.indices[index] + ') ' + 'time: ' + this._buffers.times[index] + ' => ' +
+          str += '(' + this._buffers.indices[i] + ') ' + 'time: ' + this._buffers.times[i] + ' => ' +
             this.moves.map((move: OptimizedMovesSequence) => {
               // return move.toString(index);
-              let value = move._buffers.values[index];
+              let value = move._buffers.values[i];
               return '{ ' +
-                  'value: ' + value +
-                ', speed: ' + value * this._buffers.initialSpeeds[index] +
-                ', accel: ' + value * this._buffers.accelerations[index] +
+                'value: ' + value +
+                ', speed: ' + value * this._buffers.initialSpeeds[i] +
+                ', accel: ' + value * this._buffers.accelerations[i] +
                 ' }';
             }).join(', ');
+          break;
         case 'times':
-          return 'time: ' + this._buffers.times[index] + ' => ' +
+          str += 'time: ' + this._buffers.times[i] + ' => ' +
             this.moves.map((move: OptimizedMovesSequence) => {
               // return move.toString(index);
-              let value = move._buffers.values[index];
-              let computed = 0.5 * this._buffers.accelerations[index] * this._buffers.times[index] * this._buffers.times[index] + this._buffers.initialSpeeds[index] * this._buffers.times[index];
+              let value = move._buffers.values[i];
+              let computed = 0.5 * this._buffers.accelerations[i] * this._buffers.times[i] * this._buffers.times[i] + this._buffers.initialSpeeds[i] * this._buffers.times[i];
               return '{ ' +
                 'value: ' + value +
                 ', computed: ' + computed * value +
                 ' }' + (Float.equals(computed, 1, 1e-9)? '' : '=>>>>>>>>[ERROR]');
             }).join(', ');
-        default:
-          return '';
+          break;
       }
+
+      str += '\n----\n';
     }
+    return str;
   }
 
 }

@@ -3,7 +3,7 @@ import { GCODEHelper, GCODECommand } from './gcodeHelper';
 import { Stepper } from './classes/stepper';
 import {
   ConstrainedMovementsSequence, ConstrainedMovesSequence, StepperMovementsSequence,
-  StepperMovesSequence, DynamicSequence, OptimizedMovementsSequence
+  StepperMovesSequence, DynamicSequence, OptimizedMovementsSequence, DynamicSequenceCollection
 } from './classes/kinematics';
 import { Timer } from './classes/timer.class';
 import { Shell } from './classes/shell.class';
@@ -126,7 +126,7 @@ export class GCODEOptimizer {
         const optimizedMovementsSequence: OptimizedMovementsSequence = this.optimizeConstrainedMovementsSequence(movementsSequence);
 
         let time = 0, x = 0, y = 0;
-        for(let i = 0, length = optimizedMovementsSequence._buffers['times'].length; i < length; i++) {
+        for(let i = 0, length = optimizedMovementsSequence.length; i < length; i++) {
           time += optimizedMovementsSequence._buffers.times[i];
           x += optimizedMovementsSequence.moves[0]._buffers.values[i];
           y += optimizedMovementsSequence.moves[1]._buffers.values[i];
@@ -236,22 +236,26 @@ export class GCODEOptimizer {
 
   static optimizeConstrainedMovementsSequence(movementsSequence: ConstrainedMovementsSequence): OptimizedMovementsSequence {
     const timer = new Timer();
-    const length: number = movementsSequence.length;
+    let length: number = movementsSequence.length;
     timer.clear();
     movementsSequence.roundValues();
     movementsSequence.reduce();
 
     timer.disp('reduced in', 'ms');
-    // console.log(length, '=>', movementsSequence.length); // TODO WORKING on higher reducer
+    console.log(length, '=>', movementsSequence.length);
     // console.log(movementsSequence.toString(-1, 'values'));
 
     timer.clear();
     const optimizedMovementsSequence: OptimizedMovementsSequence = movementsSequence.optimize();
     timer.disp('optimized in', 'ms');
 
+    length = optimizedMovementsSequence.length;
+    timer.clear();
     // optimizedMovementsSequence.compact();
     optimizedMovementsSequence.roundValues();
     optimizedMovementsSequence.reduce();
+    timer.disp('2nd reduced in', 'ms');
+    console.log(length, '=>', optimizedMovementsSequence.length);
 
     return optimizedMovementsSequence;
   }
@@ -322,9 +326,67 @@ export class GCODEOptimizer {
 
 
 let start = () => {
+  // testAreCollinear();
   GCODEOptimizer.optimizeFile('../assets/' + 'circle' + '.gcode', CONFIG);
 };
 
+
+
+const createDynamicSequenceCollection = (size: number = 0, moves: number = 2): DynamicSequenceCollection => {
+  const collection = new DynamicSequenceCollection(size, { 'values': Float64Array });
+  for(let i = 0; i < moves; i++) {
+    collection.moves[i] = new DynamicSequence();
+  }
+  collection.length = size;
+  return collection;
+};
+
+const buildDynamicSequenceCollection = (data: number[][]): DynamicSequenceCollection => {
+  const collection = createDynamicSequenceCollection(0, data.length);
+  for(let i = 0; i < data.length; i++) {
+    collection.moves[i]._buffers['values'] = new Float64Array(data[i]);
+  }
+  return collection;
+};
+
+const testAreCollinear = () => {
+  let collection = buildDynamicSequenceCollection([[0, 0], [0, 0]]);
+  if(!collection.areCollinear(0, 1)) throw new Error('[[0, 0], [0, 0]] should be collinear');
+
+  collection = buildDynamicSequenceCollection([[1, 0], [0, 0]]);
+  if(!collection.areCollinear(0, 1)) throw new Error('[[1, 0], [0, 0]] should be collinear');
+
+  collection = buildDynamicSequenceCollection([[0, 1], [0, 0]]);
+  if(!collection.areCollinear(0, 1)) throw new Error('[[0, 1], [0, 0]] should be collinear');
+
+  collection = buildDynamicSequenceCollection([[0, 0], [1, 0]]);
+  if(!collection.areCollinear(0, 1)) throw new Error('[[0, 0], [1, 0]] should be collinear');
+
+  collection = buildDynamicSequenceCollection([[0, 0], [0, 1]]);
+  if(!collection.areCollinear(0, 1)) throw new Error('[[0, 0], [0, 1]] should be collinear');
+
+  collection = buildDynamicSequenceCollection([[0, 4], [0, 1]]);
+  if(!collection.areCollinear(0, 1)) throw new Error('[[0, 4], [0, 1]] should be collinear');
+
+  collection = buildDynamicSequenceCollection([[4, 0], [1, 0]]);
+  if(!collection.areCollinear(0, 1)) throw new Error('[[4, 0], [1, 0]] should be collinear');
+
+  collection = buildDynamicSequenceCollection([[4, 0], [1, 0]]);
+  if(!collection.areCollinear(0, 1)) throw new Error('[[4, 0], [1, 0]] should be collinear');
+
+  collection = buildDynamicSequenceCollection([[-1, 0], [1, 0]]);
+  if(collection.areCollinear(0, 1)) throw new Error('[[-1, 0], [1, 0]] should not be collinear');
+
+  collection = buildDynamicSequenceCollection([[0, 1], [0, -1]]);
+  if(collection.areCollinear(0, 1)) throw new Error('[[0, 1], [0, -1]] should not be collinear');
+
+  collection = buildDynamicSequenceCollection([[0, 1], [1, 0]]);
+  if(collection.areCollinear(0, 1)) throw new Error('[[0, 1], [1, 0]] should not be collinear');
+
+  collection = buildDynamicSequenceCollection([[0, -1], [1, 0]]);
+  if(collection.areCollinear(0, 1)) throw new Error('[[0, -1], [1, 0]] should not be collinear');
+
+};
 
 if(IS_BROWSER) {
   window.onload = start;

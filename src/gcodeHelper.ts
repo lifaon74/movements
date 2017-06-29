@@ -119,9 +119,9 @@ export class GCodeWriterStream extends Stream.Transform {
   }
 
   _transform(commands: GCODECommand[], encoding: string, callback: () => void) {
-    if(commands instanceof Array) {
+    if(Array.isArray(commands)) {
       const gcode: string = GCODEHelper.stringify(commands);
-      if(gcode) this.push(gcode);
+      if(gcode) this.push(gcode + '\n');
       callback();
     } else {
       this.emit('error', new Error('Invalid data : expected GCODECommand[]'));
@@ -231,8 +231,8 @@ export class GCODEHelper {
 }
 
 
-const createCircle = (path: string) => {
-  return new Promise((resolve: any, reject: any) => {
+const createCircle = (path: string): Promise<void> => {
+  return new Promise<void>((resolve: any, reject: any) => {
     const writer = new Stream.Readable({objectMode: true});
     const fileWriter = fs.createWriteStream(path);
 
@@ -249,10 +249,11 @@ const createCircle = (path: string) => {
     // writer.push(GCODEHelper.arc([], 0, 0, 100, 1 / 4 * Math.PI, 3 / 4 * Math.PI, true, 100));
     writer.push(GCODEHelper.circle([], 0, 0, 1000, 1000000));
     // writer.push(GCODEHelper.circle([], 0, 0, 100, 100));
+    writer.push(GCODEHelper.moveTo([], 0, 0));
+
     writer.push(null);
   });
 };
-
 
 // createCircle('../assets/circle.gcode');
 
