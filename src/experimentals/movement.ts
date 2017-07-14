@@ -1,12 +1,12 @@
 import * as fs from 'fs';
-import { GCODEHelper, GCODECommand } from './gcodeHelper';
-import { Stepper } from './classes/stepper';
+import { GCODEHelper, GCODECommand } from '../gcodeHelper';
+import { Stepper } from '../classes/stepper';
 import {
   ConstrainedMovementsSequence, ConstrainedMovesSequence, StepperMovementsSequence,
   StepperMovesSequence, DynamicSequence
-} from './classes/kinematics';
-import { Timer } from './classes/timer.class';
-import { Shell } from './classes/shell.class';
+} from '../classes/kinematics';
+import { Timer } from '../classes/timer.class';
+import { Shell } from '../classes/shell.class';
 
 
 // node --inspect --debug-brk movement.js

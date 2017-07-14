@@ -1,5 +1,5 @@
-import { Matrix } from './classes/matrix.class';
-import { Float } from './classes/float.class';
+import { Matrix } from '../classes/matrix.class';
+import { Float } from '../classes/float.class';
 
 
 let rand = () => {

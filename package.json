@@ -4,7 +4,7 @@
   "description": "",
   "main": "timer.js",
   "scripts": {
-    "start": "npm run browserify",
+    "start": "gulp watch",
     "browserify": "browserify dist/movement.js -o dist/browser.bundled.js",
     "browserify-no-process": "browserify dist/movement.js --insert-global-vars __filename,__dirname,Buffer,global -o dist/browser.bundled.js"
   },
@@ -14,11 +14,13 @@
     "@types/core-js": "latest",
     "@types/node": "latest",
     "@types/rpio": "latest",
+    "@types/ws": "^3.0.2",
     "browserify": "latest",
     "gulp": "latest",
     "gulp-typescript": "latest",
     "typescript": "latest",
-    "vinyl-source-stream": "^1.1.0"
+    "vinyl-source-stream": "^1.1.0",
+    "ws": "^3.0.0"
   },
   "dependencies": {
     "//": {
@@ -28,6 +30,7 @@
       "spi": "^0.2.0",
       "virtual-serialport": "^0.2.1",
       "webworker-threads": "latest"
-    }
+    },
+    "websocket": "^1.0.24"
   }
 }

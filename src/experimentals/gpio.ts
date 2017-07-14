@@ -4,9 +4,9 @@ import * as rpio from 'rpio';
 import { MCP3008 } from './components/MCP3008';
 import { SPIController } from './components/SPIController';
 
-import { ConstrainedMovementsSequence, StepperMovementsSequence, StepperMovesSequence } from './classes/kinematics';
+import { ConstrainedMovementsSequence, StepperMovementsSequence, StepperMovesSequence } from '../classes/kinematics';
 import { CNCController, CONFIG } from './movement';
-import { Timer } from './classes/timer.class';
+import { Timer } from '../classes/timer.class';
 
 let NanoTimer:any = require('nanotimer');
 

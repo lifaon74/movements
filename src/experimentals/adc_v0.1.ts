@@ -1,7 +1,7 @@
 import * as rpio from 'rpio';
 
 import { MCP3201 } from './components/MCP3201';
-import { DeferredPromise } from './classes/deferredPromise';
+import { DeferredPromise } from '../classes/deferredPromise';
 
 let Worker:any = require('webworker-threads').Worker;
 declare let self:any;
